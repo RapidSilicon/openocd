@@ -22,6 +22,7 @@ static struct pld_driver *pld_drivers[] = {
 	&gowin_pld,
 	&intel_pld,
 	&lattice_pld,
+	&gemini_pld,
 	&virtex2_pld,
 	NULL,
 };

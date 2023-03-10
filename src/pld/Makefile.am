@@ -24,4 +24,6 @@ noinst_LTLIBRARIES += %D%/libpld.la
 	%D%/pld.h \
 	%D%/raw_bit.h \
 	%D%/xilinx_bit.h \
-	%D%/virtex2.h
+	%D%/virtex2.h \
+	%D%/gemini.c \
+	%D%/gemini.h

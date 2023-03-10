@@ -66,6 +66,7 @@ extern struct pld_driver gatemate_pld;
 extern struct pld_driver gowin_pld;
 extern struct pld_driver intel_pld;
 extern struct pld_driver lattice_pld;
+extern struct pld_driver gemini_pld;
 extern struct pld_driver virtex2_pld;
 
 #endif /* OPENOCD_PLD_PLD_H */
