@@ -52,7 +52,7 @@ jobs:
         cd automake-1.14 && ./configure --prefix=/usr && make && make install && cd -
 
     - name: Init Config
-    - run: ./bootstrap
+      run: ./bootstrap
 
     - name: Prepare libusb1
       env:
