@@ -1,0 +1,152 @@
+on: push
+
+name: OpenOCD Snapshot
+
+jobs:
+  package:
+    runs-on: ubuntu-20.04
+    container:
+      image: centos:7
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+    env:
+      DL_DIR: ../downloads
+      BUILD_DIR: ../build
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.11.0
+      with:
+        access_token: ${{ github.token }}
+        
+    - name: Update Git
+      run: |
+        yum install -y openssh-server openssh-clients
+        yum remove -y git*
+        yum install -y https://packages.endpointdev.com/rhel/7/os/x86_64/endpoint-repo.x86_64.rpm
+        yum install -y git
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install needed packages
+      run: |
+        yum update -y
+        yum group install -y "Development Tools" 
+        yum install -y epel-release texinfo
+        curl -C - -O https://cmake.org/files/v3.15/cmake-3.15.7-Linux-x86_64.tar.gz
+        tar xzf cmake-3.15.7-Linux-x86_64.tar.gz
+        ln -s $PWD/cmake-3.15.7-Linux-x86_64/bin/cmake /usr/bin/cmake
+        yum install -y openssh-server openssh-clients
+        yum install -y centos-release-scl-rh
+        yum install -y devtoolset-11
+        yum install -y devtoolset-11-toolchain
+        yum install -y devtoolset-11-gcc-c++
+        wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.70.tar.gz 
+        tar -xvzf autoconf-2.70.tar.gz
+        cd autoconf-2.70 && ./configure --prefix=/usr && make && make install && cd -
+        wget http://ftp.gnu.org/gnu/automake/automake-1.14.tar.gz
+        tar -xvzf automake-1.14.tar.gz 
+        cd automake-1.14 && ./configure --prefix=/usr && make && make install && cd -
+
+    - name: Init Config
+    - run: ./bootstrap
+
+    - name: Prepare libusb1
+      env:
+        LIBUSB1_VER: 1.0.26
+      run: |
+        mkdir -p $DL_DIR && cd $DL_DIR
+        wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
+        tar -xjf libusb-${LIBUSB1_VER}.tar.bz2
+        echo "LIBUSB1_SRC=$PWD/libusb-${LIBUSB1_VER}" >> $GITHUB_ENV
+
+    - name: Prepare hidapi
+      env:
+        HIDAPI_VER: 0.11.2
+      run: |
+        mkdir -p $DL_DIR && cd $DL_DIR
+        wget "https://github.com/libusb/hidapi/archive/hidapi-${HIDAPI_VER}.tar.gz"
+        tar -xzf hidapi-${HIDAPI_VER}.tar.gz
+        cd hidapi-hidapi-${HIDAPI_VER}
+        ./bootstrap
+        echo "HIDAPI_SRC=$PWD" >> $GITHUB_ENV
+
+    - name: Prepare libftdi
+      env:
+        LIBFTDI_VER: 1.5
+      run: |
+        mkdir -p $DL_DIR && cd $DL_DIR
+        wget "http://www.intra2net.com/en/developer/libftdi/download/libftdi1-${LIBFTDI_VER}.tar.bz2"
+        tar -xjf libftdi1-${LIBFTDI_VER}.tar.bz2
+        echo "LIBFTDI_SRC=$PWD/libftdi1-${LIBFTDI_VER}" >> $GITHUB_ENV
+
+    - name: Prepare capstone
+      env:
+        CAPSTONE_VER: 4.0.2
+      run: |
+        mkdir -p $DL_DIR && cd $DL_DIR
+        CAPSTONE_NAME=${CAPSTONE_VER}
+        CAPSTONE_FOLDER=capstone-${CAPSTONE_VER}
+        wget "https://github.com/aquynh/capstone/archive/${CAPSTONE_VER}.tar.gz"
+        tar -xzf ${CAPSTONE_VER}.tar.gz
+        echo "CAPSTONE_SRC=$PWD/capstone-${CAPSTONE_VER}" >> $GITHUB_ENV
+
+    - name: Package OpenOCD for Linux x86_64
+      env:
+        MAKE_JOBS: 2
+        HOST: i686-w64-mingw32
+        LIBUSB1_CONFIG: --enable-shared --disable-static
+        HIDAPI_CONFIG: --enable-shared --disable-static --disable-testgui
+        LIBFTDI_CONFIG: -DSTATICLIBS=OFF -DEXAMPLES=OFF -DFTDI_EEPROM=OFF
+        CAPSTONE_CONFIG: "CAPSTONE_BUILD_CORE_ONLY=yes CAPSTONE_STATIC=yes CAPSTONE_SHARED=no"
+      run: |
+        source /opt/rh/devtoolset-11/enable
+        gcc --version
+        # check if there is tag pointing at HEAD, otherwise take the HEAD SHA-1 as OPENOCD_TAG
+        OPENOCD_TAG="`git tag --points-at HEAD`"
+        [ -z $OPENOCD_TAG ] && OPENOCD_TAG="`git rev-parse --short HEAD`"
+        # check if there is tag pointing at HEAD, if so the release will have the same name as the tag,
+        # otherwise it will be named 'latest'
+        RELEASE_NAME="`git tag --points-at HEAD`"
+        [ -z $RELEASE_NAME ] && RELEASE_NAME="latest"
+        [[ $RELEASE_NAME = "latest" ]] && IS_PRE_RELEASE="true" || IS_PRE_RELEASE="false"
+        # set env and call cross-build.sh
+        export OPENOCD_TAG=$OPENOCD_TAG
+        export OPENOCD_SRC=$PWD
+        export OPENOCD_CONFIG=""
+        mkdir -p $BUILD_DIR &&  cd $BUILD_DIR
+        bash $OPENOCD_SRC/contrib/cross-build.sh $HOST
+        # add missing dlls
+        cd $HOST-root/usr
+        cp `$HOST-gcc --print-file-name=libwinpthread-1.dll` ./bin/
+        cp `$HOST-gcc --print-file-name=libgcc_s_sjlj-1.dll` ./bin/
+        # prepare the artifact
+        ARTIFACT="openocd-${OPENOCD_TAG}-${HOST}.tar.gz"
+        tar -czf $ARTIFACT *
+        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+        echo "IS_PRE_RELEASE=$IS_PRE_RELEASE" >> $GITHUB_ENV
+        echo "ARTIFACT_PATH=$PWD/$ARTIFACT" >> $GITHUB_ENV
+
+#    - name: Publish OpenOCD packaged for windows
+#      uses: actions/upload-artifact@v2
+#      with:
+#        path: ${{ env.ARTIFACT_PATH }}
+#    - name: Delete 'latest' Release
+#      uses: dev-drprasad/delete-tag-and-release@v0.2.0
+#      with:
+#        delete_release: true
+#        tag_name: ${{ env.RELEASE_NAME }}
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#    - name: Create Release
+#      uses: ncipollo/release-action@v1
+#      with:
+#        tag: ${{ env.RELEASE_NAME }}
+#        commit: ${{ github.sha }}
+#        draft: false
+#        artifacts: ${{ env.ARTIFACT_PATH }}
+#        prerelease: ${{ env.IS_PRE_RELEASE }}
+#        token: ${{ secrets.GITHUB_TOKEN }}
