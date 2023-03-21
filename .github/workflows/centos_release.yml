@@ -52,7 +52,9 @@ jobs:
         cd automake-1.14 && ./configure --prefix=/usr && make && make install && cd -
 
     - name: Init Config
-      run: ./bootstrap
+      run: |
+        git config --global --add safe.directory /__w/openocd/openocd
+        ./bootstrap
 
     - name: Prepare libusb1
       env:
