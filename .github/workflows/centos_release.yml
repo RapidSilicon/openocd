@@ -3,7 +3,7 @@ on: push
 name: OpenOCD Snapshot
 
 jobs:
-  package:
+  package_linux:
     runs-on: ubuntu-20.04
     container:
       image: centos:7
