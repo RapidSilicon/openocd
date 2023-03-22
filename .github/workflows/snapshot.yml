@@ -102,12 +102,12 @@ jobs:
           echo "IS_PRE_RELEASE=$IS_PRE_RELEASE" >> $GITHUB_ENV
           echo "ARTIFACT_PATH=$PWD/$ARTIFACT" >> $GITHUB_ENV
       - name: Publish OpenOCD packaged for windows
-        if: "${{ github.ref == 'refs/heads/main' }}"
+        if: "${{ github.ref == 'refs/heads/master' }}"
         uses: actions/upload-artifact@v3
         with:
           path: ${{ env.ARTIFACT_PATH }}
       - name: Delete 'latest' Release
-        if: "${{ github.ref == 'refs/heads/main' }}"
+        if: "${{ github.ref == 'refs/heads/master' }}"
         uses: dev-drprasad/delete-tag-and-release@v0.2.1
         with:
           delete_release: true
@@ -115,7 +115,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
-        if: "${{ github.ref == 'refs/heads/main' }}"
+        if: "${{ github.ref == 'refs/heads/master' }}"
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ env.RELEASE_NAME }}
