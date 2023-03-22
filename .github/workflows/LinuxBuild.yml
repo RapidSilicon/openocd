@@ -85,8 +85,7 @@ jobs:
         mkdir -p $DL_DIR/libusb1 && cd $DL_DIR/libusb1
         wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
         tar -xvjf libusb-${LIBUSB1_VER}.tar.bz2
-        ls -l
-        cd libusb-${LIBUSB1_VER} && ./onfigure --prefix=/usr --disable-shared --enable-static && make && make install
+        cd libusb-${LIBUSB1_VER} && ./configure --prefix=/usr --disable-shared --enable-static && make && make install
         #echo "LIBUSB1_SRC=$PWD/libusb-${LIBUSB1_VER}" >> $GITHUB_ENV
 
     - name: Prepare hidapi
@@ -98,7 +97,7 @@ jobs:
         wget "https://github.com/libusb/hidapi/archive/hidapi-${HIDAPI_VER}.tar.gz"
         tar -xzf hidapi-${HIDAPI_VER}.tar.gz
         cd hidapi-hidapi-${HIDAPI_VER}
-        ./bootstrap && ./onfigure --prefix=/usr --disable-shared --enable-static && make && make install
+        ./bootstrap && ./configure --prefix=/usr --disable-shared --enable-static && make && make install
         #echo "HIDAPI_SRC=$PWD" >> $GITHUB_ENV
 
     - name: Prepare libftdi
