@@ -1,0 +1,24 @@
+
+name: OpenOCD Linux Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+      # 64bit
+      CFALGS: -m64
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential autoconf texinfo automake libtool libusb-1.0-0 libusb-1.0-0-dev libftdi-dev
+    - run: ./bootstrap
+    - run: ./configure
+    - run: make
+    - run: file src/openocd | grep 64-bit
+    - run: ./src/openocd -v
