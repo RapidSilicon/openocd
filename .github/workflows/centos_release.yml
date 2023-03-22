@@ -102,7 +102,6 @@ jobs:
         echo "CAPSTONE_SRC=$PWD/capstone-${CAPSTONE_VER}" >> $GITHUB_ENV
 
     - name: Build OpenOCD for Linux x86_64
-      env:
       run: |
         source /opt/rh/devtoolset-11/enable
         gcc --version
