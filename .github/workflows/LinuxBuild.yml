@@ -86,7 +86,7 @@ jobs:
         mkdir -p $DL_DIR/libusb1 && cd $DL_DIR/libusb1
         wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
         tar -xjf libusb-${LIBUSB1_VER}.tar.bz2
-        cd libusb-${LIBUSB1_VER} && ./configure --prefix=/usr/local --disable-shared --enable-static && make && make install
+        cd libusb-${LIBUSB1_VER} && ./configure --prefix=/usr/local --enable-shared --disable-static && make && make install
         ls -l /usr/local/lib
         echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
 
@@ -100,7 +100,7 @@ jobs:
         wget "https://github.com/libusb/hidapi/archive/hidapi-${HIDAPI_VER}.tar.gz"
         tar -xzf hidapi-${HIDAPI_VER}.tar.gz
         cd hidapi-hidapi-${HIDAPI_VER} && mkdir build && cd build
-        cmake -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..  && make && make install
+        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local ..  && make && make install
         ls -l
         #echo "HIDAPI_SRC=$PWD" >> $GITHUB_ENV
 
