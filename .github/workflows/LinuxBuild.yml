@@ -108,6 +108,7 @@ jobs:
       env:
         LIBFTDI_VER: 1.5
       run: |
+        export LIBUSB1_CONFIG="--enable-static"
         source /opt/rh/devtoolset-11/enable
         mkdir -p $DL_DIR/libftdi && cd $DL_DIR/libftdi
         wget "http://www.intra2net.com/en/developer/libftdi/download/libftdi1-${LIBFTDI_VER}.tar.bz2"
