@@ -84,7 +84,7 @@ jobs:
         source /opt/rh/devtoolset-11/enable
         mkdir -p $DL_DIR/libusb1 && cd $DL_DIR/libusb1
         wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
-        tar -xvjf libusb-${LIBUSB1_VER}.tar.bz2
+        tar -xjf libusb-${LIBUSB1_VER}.tar.bz2
         cd libusb-${LIBUSB1_VER} && ./configure --prefix=/usr --disable-shared --enable-static && make && make install
         #echo "LIBUSB1_SRC=$PWD/libusb-${LIBUSB1_VER}" >> $GITHUB_ENV
 
