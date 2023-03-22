@@ -11433,7 +11433,8 @@ In a debug session using JTAG for its transport protocol,
 OpenOCD supports running such test files.
 
 @deffn {Command} {svf} @file{filename} [@option{-tap @var{tapname}}] [@option{[-]quiet}] @
-                     [@option{[-]nil}] [@option{[-]progress}] [@option{[-]ignore_error}]
+                     [@option{[-]nil}] [@option{[-]progress}] [@option{[-]ignore_error}] @
+                     [@option{-noreset}] [@option{-addcycles @var{cyclecount}}]
 This issues a JTAG reset (Test-Logic-Reset) and then
 runs the SVF script from @file{filename}.
 
@@ -11452,6 +11453,10 @@ on the real interface;
 @item @option{[-]progress} enable progress indication;
 @item @option{[-]ignore_error} continue execution despite TDO check
 errors.
+@item @option{-noreset} omit JTAG reset (Test-Logic-Reset) before executing
+content of the SVF file;
+@item @option{-addcycles @var{cyclecount}} inject @var{cyclecount} number of
+additional TCLK cycles after each SDR scan instruction;
 @end itemize
 @end deffn
 
@@ -11887,7 +11892,7 @@ _tx_thread_current_ptr, _tx_thread_created_ptr, _tx_thread_created_count.
 @raggedright
 pxCurrentTCB, pxReadyTasksLists, xDelayedTaskList1, xDelayedTaskList2,
 pxDelayedTaskList, pxOverflowDelayedTaskList, xPendingReadyList,
-uxCurrentNumberOfTasks, uxTopUsedPriority.
+uxCurrentNumberOfTasks, uxTopUsedPriority, xSchedulerRunning.
 @end raggedright
 @item linux symbols
 init_task.
