@@ -108,12 +108,11 @@ jobs:
       env:
         LIBFTDI_VER: 1.5
       run: |
-        export LIBUSB1_CONFIG="--enable-static"
         source /opt/rh/devtoolset-11/enable
         mkdir -p $DL_DIR/libftdi && cd $DL_DIR/libftdi
         wget "http://www.intra2net.com/en/developer/libftdi/download/libftdi1-${LIBFTDI_VER}.tar.bz2"
         tar -xjf libftdi1-${LIBFTDI_VER}.tar.bz2
-        cd libftdi1-${LIBFTDI_VER} && mkdir build && cd build && cmake -DEXAMPLES=OFF -DFTDI_EEPROM=OFF -DCMAKE_INSTALL_PREFIX=/usr .. && make && make install
+        cd libftdi1-${LIBFTDI_VER} && mkdir build && cd build && cmake -DSTATICLIBS=OFF -DEXAMPLES=OFF -DFTDI_EEPROM=OFF -DCMAKE_INSTALL_PREFIX=/usr .. && make && make install
         #echo "LIBFTDI_SRC=$PWD/libftdi1-${LIBFTDI_VER}" >> $GITHUB_ENV
 
     - name: Prepare capstone
