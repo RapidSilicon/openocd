@@ -81,7 +81,7 @@ jobs:
       env:
         LIBUSB1_VER: 1.0.26
       run: |
-        yum install libudev-devel
+        yum install -y libudev-devel
         source /opt/rh/devtoolset-11/enable
         mkdir -p $DL_DIR/libusb1 && cd $DL_DIR/libusb1
         wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
