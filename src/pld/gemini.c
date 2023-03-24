@@ -241,34 +241,32 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 
 	while (1)
 	{
-		LOG_INFO("[RS] Poll command status in 1 second. Poll #%d...", num_polls+1);
-
-		// wait for a second
-		sleep(1);
+		LOG_INFO("[RS] Poll command status #%d...", ++num_polls);
 
 		retval = gemini_get_command_status(target, status);
 		if (retval != ERROR_OK)
 			break;
-
-		if (*status >= STATUS_SUCCESS)
+		if (*status != STATUS_IDLE && *status != STATUS_IN_PROGRESS)
 			break;
-
-		if (++num_polls >= GEMINI_COMMAND_POLLS)
+		if (num_polls >= GEMINI_COMMAND_POLLS)
 		{
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
 			retval = ERROR_TIMEOUT_REACHED;
 			break;
 		}
+		sleep(1);
 	}
 
+	// check the command status
+	if (retval == ERROR_OK)
+	{
+		if (*status != STATUS_SUCCESS) {
+			LOG_ERROR("[RS] Command completed with error %d", *status);
+			retval = ERROR_FAIL;
+		}
+	}
 	// clear command and status field
 	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
-
-	if (retval == ERROR_OK && *status != STATUS_SUCCESS)
-	{
-		LOG_ERROR("[RS] Command completed with error %d", *status);
-		retval = ERROR_FAIL;
-	}
 
 	return retval;
 }
