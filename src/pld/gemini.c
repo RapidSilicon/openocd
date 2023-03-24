@@ -122,6 +122,28 @@ static int gemini_read_reg32(struct target * target, target_addr_t address, uint
 	return retval;
 }
 
+static int gemini_write_memory(struct target * target, target_addr_t address, uint32_t size, uint32_t count, const uint8_t *buffer)
+{
+	int retval = ERROR_OK;
+
+	if (target_halt(target) == ERROR_OK)
+	{
+		if (target_write_memory(target, address, size, count, buffer) != ERROR_OK)
+		{
+			LOG_WARNING("[RS] Failed to write to address 0x%08x", (uint32_t)address);
+			retval = ERROR_FAIL;
+		}
+		target_resume(target, true, 0, true, false);
+	}
+	else
+	{
+		LOG_ERROR("[RS] Failed to halt target");
+		return ERROR_FAIL;
+	}
+
+	return retval;
+}
+
 static int gemini_get_cpu_type(struct target * target, uint32_t *cpu_type)
 {
 	uint32_t debug_control;
@@ -234,20 +256,25 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		}
 	}
 
+	if (*status != STATUS_SUCCESS)
+	{
+		LOG_ERROR("[RS] Command completed with error %d", *status);
+		return ERROR_FAIL;
+	}
+
 	return ERROR_OK;
 }
 
-static int gemini_load_config_fsbl(struct target *target, gemini_bit_file_t *bit_file)
+static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 {
 	int retval = ERROR_OK;
-	uint8_t *bitstream = NULL;
+	uint8_t *fsbl;
 	uint32_t filesize;
-	uint32_t status;
-	uint32_t spare_reg;
+	uint32_t value;
 
 	LOG_INFO("[RS] Loading FSBL firmware...");
 
-	if (gemini_create_helper_bitstream(bit_file, &bitstream, &filesize) != ERROR_OK)
+	if (gemini_create_helper_bitstream(bit_file, &fsbl, &filesize) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to create helper bitstream");
 		return ERROR_FAIL;
@@ -256,71 +283,37 @@ static int gemini_load_config_fsbl(struct target *target, gemini_bit_file_t *bit
 	if (filesize > GEMINI_SRAM_SIZE)
 	{
 		LOG_ERROR("[RS] Helper bitstream size (%d bytes) is larger than Gemini available SRAM (%d bytes)", filesize, GEMINI_SRAM_SIZE);
-		free(bitstream);
-		return ERROR_FAIL;	
-	}
-
-	if (target_halt(target) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to halt target");
-		free(bitstream);
+		free(fsbl);
 		return ERROR_FAIL;
 	}
 
-	if (retval == ERROR_OK)
-	{
 #ifdef LOCAL_BUILD
-		if (filesize > 4096) filesize = 4096;
+	if (filesize > 4096) filesize = 4096;
 #endif
-		if (target_write_memory(target, GEMINI_SRAM_ADDRESS, 4, filesize/4, bitstream) != ERROR_OK)
-		{
-			LOG_ERROR("[RS] Failed to write bitstream of size %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
-			retval = ERROR_FAIL;
-		}
-		else
-		{
-			LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
-		}
+
+	retval = gemini_write_memory(target, GEMINI_SRAM_ADDRESS, 4, filesize / 4, fsbl);
+	free(fsbl);
+
+	if (retval != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to write bitstream of %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
+		return ERROR_FAIL;
 	}
 
-	if (retval == ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_FSBL) != ERROR_OK)
 	{
-		if (target_read_u32(target, GEMINI_SPARE_REG, &spare_reg) != ERROR_OK)
-		{
-			LOG_ERROR("[RS] Failed to read spare_reg");
-			retval = ERROR_FAIL;
-		}
+		LOG_ERROR("[RS] Failed to write command to spare_reg");
+		return ERROR_FAIL;
 	}
 
-	if (retval == ERROR_OK)
+	if (gemini_poll_command_complete_and_status(target, &value) == ERROR_OK)
 	{
-		if (target_write_u32(target, GEMINI_SPARE_REG, (spare_reg & ~0xffff) | COMMAND_LOAD_FSBL) != ERROR_OK)
-		{
-			LOG_ERROR("[RS] Failed to write command to spare_reg");
-			retval = ERROR_FAIL;
-		}
-		else
-		{
-			LOG_INFO("[RS] Wrote command to spare_reg");
-		}
-	}
-
-	target_resume(target, true, 0, true, false);
-	free(bitstream);
-		
-	if (retval == ERROR_OK)
-	{
-		if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
-		{
-			if (status != STATUS_SUCCESS)
-			{
-				LOG_ERROR("[RS] Command completed with error status %d", status);
-				retval = ERROR_FAIL;
-			}
-		}
-		else
+		// double check if the firmware type is FSBL
+		if (gemini_get_firmware_type(target, &value) != ERROR_OK || value != FW_FSBL)
 			retval = ERROR_FAIL;
 	}
+	else
+		retval = ERROR_FAIL;
 
 	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
 
@@ -337,17 +330,18 @@ static int gemini_init_ddr(struct target *target)
 	int retval = ERROR_OK;
 	uint32_t status;
 
+	LOG_INFO("[RS] Initializing DDR memory...");
+
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_INIT_DDR) != ERROR_OK)
 		return ERROR_FAIL;
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
-		return ERROR_FAIL;
+		retval = ERROR_FAIL;
 
-	if (status != STATUS_SUCCESS)
-	{
-		LOG_ERROR("[RS] Command completed with error status %d", status);
-		return ERROR_FAIL;
-	}
+	if (retval != ERROR_OK)
+		LOG_ERROR("[RS] Failed to initialize DDR memory");
+	else
+		LOG_INFO("[RS] DDR memory is initialized successfully");
 
 	return retval;
 }
@@ -395,7 +389,7 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	if (fw_type == FW_BOOTROM)
 	{
 		LOG_INFO("[RS] Bootrom firmware type detected");
-		if (gemini_load_config_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
+		if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
 			return ERROR_FAIL;
 	}
 	else
@@ -411,11 +405,9 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 
 	if (ddr_status == DDR_NOT_INIT)
 	{
+		LOG_ERROR("[RS] DDR memory not is initialized");
 		if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
-		{
-			LOG_ERROR("[RS] Failed to initialize DDR memory");
 			return ERROR_FAIL;
-		}
 	}
 	else
 	{
