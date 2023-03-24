@@ -236,6 +236,7 @@ static int gemini_switch_to_bcpu(struct target * target)
 
 static int gemini_poll_command_complete_and_status(struct target * target, uint32_t *status)
 {
+	int retval = ERROR_OK;
 	uint32_t num_polls = 0;
 
 	while (1)
@@ -245,8 +246,9 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		// wait for a second
 		sleep(1);
 
-		if (gemini_get_command_status(target, status) != ERROR_OK)
-			return ERROR_FAIL;
+		retval = gemini_get_command_status(target, status);
+		if (retval != ERROR_OK)
+			break;
 
 		if (*status >= STATUS_SUCCESS)
 			break;
@@ -254,20 +256,21 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		if (++num_polls >= GEMINI_COMMAND_POLLS)
 		{
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
-			return ERROR_FAIL;
+			retval = ERROR_TIMEOUT_REACHED;
+			break;
 		}
 	}
 
 	// clear command and status field
 	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
 
-	if (*status != STATUS_SUCCESS)
+	if (retval == ERROR_OK && *status != STATUS_SUCCESS)
 	{
 		LOG_ERROR("[RS] Command completed with error %d", *status);
-		return ERROR_FAIL;
+		retval = ERROR_FAIL;
 	}
 
-	return ERROR_OK;
+	return retval;
 }
 
 static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
@@ -306,17 +309,17 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	}
 	else
 	{
-		LOG_ERROR("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
+		LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 	}
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_FSBL) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command to spare_reg");
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_LOAD_FSBL);
 		return ERROR_FAIL;
 	}
 	else
 	{
-		LOG_ERROR("[RS] Wrote command to spare_reg");
+		LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_FSBL);
 	}
 
 	if (gemini_poll_command_complete_and_status(target, &value) == ERROR_OK)
@@ -376,9 +379,20 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_ERROR("[RS] Failed to write bitstream (%d bytes) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 		return ERROR_FAIL;
 	}
+	else
+	{
+		LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
+	}
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_BITSTREAM) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_LOAD_BITSTREAM);
 		return ERROR_FAIL;
+	}
+	else
+	{
+		LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_BITSTREAM);
+	}
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
 		retval = ERROR_FAIL;
@@ -469,7 +483,7 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	}
 	else
 	{
-		LOG_ERROR("[RS] DDR memory is initialized");
+		LOG_INFO("[RS] DDR memory is already initialized");
 	}
 
 	if (gemini_program_bitstream(gemini_info->target, &bit_file) != ERROR_OK)
