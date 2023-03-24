@@ -256,6 +256,9 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		}
 	}
 
+	// clear command and status field
+	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
+
 	if (*status != STATUS_SUCCESS)
 	{
 		LOG_ERROR("[RS] Command completed with error %d", *status);
@@ -299,11 +302,19 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		LOG_ERROR("[RS] Failed to write bitstream of %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 		return ERROR_FAIL;
 	}
+	else
+	{
+		LOG_ERROR("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
+	}
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_FSBL) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write command to spare_reg");
 		return ERROR_FAIL;
+	}
+	else
+	{
+		LOG_ERROR("[RS] Wrote command to spare_reg");
 	}
 
 	if (gemini_poll_command_complete_and_status(target, &value) == ERROR_OK)
@@ -314,8 +325,6 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	}
 	else
 		retval = ERROR_FAIL;
-
-	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
 
 	if (retval != ERROR_OK)
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
@@ -346,6 +355,33 @@ static int gemini_init_ddr(struct target *target)
 	return retval;
 }
 
+static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bit_file)
+{
+	int retval = ERROR_OK;
+	uint32_t status;
+
+	LOG_INFO("[RS] Loading bitstream to DDR memory...");
+
+	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, bit_file->filesize / 4, bit_file->rawdata) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to write bitstream (%ld bytes) to DDR memory at 0x%08x", bit_file->filesize, GEMINI_LOAD_ADDRESS);
+		return ERROR_FAIL;
+	}
+
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_BITSTREAM) != ERROR_OK)
+		return ERROR_FAIL;
+
+	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
+		retval = ERROR_FAIL;
+
+	if (retval != ERROR_OK)
+		LOG_ERROR("[RS] Failed to program bitstream to the device");
+	else
+		LOG_INFO("[RS] Device is programmed successfully");
+
+	return retval;
+}
+
 static int gemini_load(struct pld_device *pld_device, const char *filename)
 {
 	struct gemini_pld_device *gemini_info = pld_device->driver_priv;
@@ -360,12 +396,14 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	if (gemini_info->tap->idcode != GEMINI_IDCODE)
 	{
 		LOG_ERROR("[RS] Not gemini device");
+		gemini_free_bit_file(&bit_file);
 		return ERROR_FAIL;
 	}
 
 	if (gemini_get_cpu_type(gemini_info->target, &cpu) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to get connected cpu type");
+		gemini_free_bit_file(&bit_file);
 		return ERROR_FAIL;
 	}
 
@@ -373,7 +411,10 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	{
 		LOG_INFO("[RS] Connected to ACPU");
 		if (gemini_switch_to_bcpu(gemini_info->target) != ERROR_OK)
+		{
+			gemini_free_bit_file(&bit_file);
 			return ERROR_FAIL;
+		}
 	}
 	else
 	{
@@ -383,6 +424,7 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	if (gemini_get_firmware_type(gemini_info->target, &fw_type) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to determine the firmware type");
+		gemini_free_bit_file(&bit_file);
 		return ERROR_FAIL;
 	}
 
@@ -390,7 +432,10 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	{
 		LOG_INFO("[RS] Bootrom firmware type detected");
 		if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
+		{
+			gemini_free_bit_file(&bit_file);
 			return ERROR_FAIL;
+		}
 	}
 	else
 	{
@@ -400,6 +445,7 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	if (gemini_get_ddr_status(gemini_info->target, &ddr_status) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to determine the DDR memory status");
+		gemini_free_bit_file(&bit_file);
 		return ERROR_FAIL;
 	}
 
@@ -407,17 +453,23 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	{
 		LOG_ERROR("[RS] DDR memory not is initialized");
 		if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
+		{
+			gemini_free_bit_file(&bit_file);
 			return ERROR_FAIL;
+		}
 	}
 	else
 	{
 		LOG_ERROR("[RS] DDR memory is initialized");
 	}
 
-	// todo: load bitstream onto DDR & trigger fsbl to do bitstream programming to fabric
+	if (gemini_program_bitstream(gemini_info->target, &bit_file) != ERROR_OK)
+	{
+		gemini_free_bit_file(&bit_file);
+		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
-	if (gemini_info->target->state == TARGET_HALTED)
-		target_resume(gemini_info->target, true, 0, true, false);
+	gemini_free_bit_file(&bit_file);
 
 	return ERROR_OK;
 }
