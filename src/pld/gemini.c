@@ -22,6 +22,7 @@
 #define GEMINI_DEBUG_CONTROL  	0x80001028
 #define GEMINI_SPARE_REG      	0x800010f0
 #define GEMINI_SRAM_ADDRESS   	0x80002000
+#define GEMINI_LOAD_ADDRESS   	0x80002000
 #endif
 
 #ifdef EMULATOR_BUILD
@@ -29,6 +30,7 @@
 #define GEMINI_DEBUG_CONTROL  	0xf1000028
 #define GEMINI_SPARE_REG      	0x800000f0
 #define GEMINI_SRAM_ADDRESS   	0x80001000
+#define GEMINI_LOAD_ADDRESS   	0x80001000
 #endif
 
 #if !defined(LOCAL_BUILD) && !defined(EMULATOR_BUILD)
@@ -36,9 +38,9 @@
 #define GEMINI_DEBUG_CONTROL  	0xf1000028
 #define GEMINI_SPARE_REG      	0xf10000f0
 #define GEMINI_SRAM_ADDRESS   	0x80000000
+#define GEMINI_LOAD_ADDRESS   	0x00000000
 #endif
 
-#define GEMINI_LOAD_ADDRESS   	0x00000000
 #define GEMINI_SRAM_SIZE	   	(255 * 1024)
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
@@ -359,12 +361,19 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 {
 	int retval = ERROR_OK;
 	uint32_t status;
+	uint32_t filesize = (uint32_t)bit_file->filesize;
 
 	LOG_INFO("[RS] Loading bitstream to DDR memory...");
 
-	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, bit_file->filesize / 4, bit_file->rawdata) != ERROR_OK)
+#ifdef LOCAL_BUILD
+	if (filesize > 4096) filesize = 4096;
+#elif defined(EMULATOR_BUILD)
+	if (filesize > 204800) filesize = 204800;
+#endif
+
+	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, filesize / 4, bit_file->rawdata) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write bitstream (%ld bytes) to DDR memory at 0x%08x", bit_file->filesize, GEMINI_LOAD_ADDRESS);
+		LOG_ERROR("[RS] Failed to write bitstream (%d bytes) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 		return ERROR_FAIL;
 	}
 
