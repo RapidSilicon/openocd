@@ -129,7 +129,8 @@ jobs:
         gcc --version
         mkdir $DL_DIR/openocd
         ./configure --prefix=$DL_DIR/openocd && make -j2 && make install
-        
+        ldd -r $DL_DIR/openocd/bin/openocd
+        $DL_DIR/openocd/bin/openocd -v
         # check if there is tag pointing at HEAD, otherwise take the HEAD SHA-1 as OPENOCD_TAG
         OPENOCD_TAG="`git tag --points-at HEAD`"
         [ -z $OPENOCD_TAG ] && OPENOCD_TAG="`git rev-parse --short HEAD`"
