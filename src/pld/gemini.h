@@ -17,4 +17,18 @@ struct gemini_pld_device {
 	struct jtag_tap *tap;
 };
 
+/* fsbl firmware command and status defines */
+#define DDR_INIT				1
+#define DDR_NOT_INIT			0
+#define FW_BOOTROM				1
+#define FW_FSBL					2
+#define COMMAND_IDLE			0
+#define COMMAND_LOAD_FSBL		1
+#define COMMAND_INIT_DDR		2
+#define COMMAND_LOAD_BITSTREAM	3
+#define STATUS_IDLE				0
+#define STATUS_IN_PROGRESS		1
+#define STATUS_SUCCESS			2
+#define STATUS_FAIL				3
+
 #endif /* OPENOCD_PLD_GEMINI_H */
