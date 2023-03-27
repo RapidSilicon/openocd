@@ -86,22 +86,19 @@ jobs:
         mkdir -p $DL_DIR/libusb1 && cd $DL_DIR/libusb1
         wget "https://github.com/libusb/libusb/releases/download/v${LIBUSB1_VER}/libusb-${LIBUSB1_VER}.tar.bz2"
         tar -xjf libusb-${LIBUSB1_VER}.tar.bz2
-        cd libusb-${LIBUSB1_VER} && ./configure --prefix=/usr/local --enable-shared --disable-static && make && make install
-        ls -l /usr/local/lib
+        cd libusb-${LIBUSB1_VER} && ./configure && make && make install
         echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
 
     - name: Prepare hidapi
       env:
         HIDAPI_VER: 0.11.2
       run: |
-        printenv
         source /opt/rh/devtoolset-11/enable
         mkdir -p $DL_DIR/hidapi && cd $DL_DIR/hidapi
         wget "https://github.com/libusb/hidapi/archive/hidapi-${HIDAPI_VER}.tar.gz"
         tar -xzf hidapi-${HIDAPI_VER}.tar.gz
         cd hidapi-hidapi-${HIDAPI_VER} && mkdir build && cd build
-        cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local ..  && make && make install
-        ls -l
+        cmake .. && make && make install
         #echo "HIDAPI_SRC=$PWD" >> $GITHUB_ENV
 
     - name: Prepare libftdi
@@ -112,7 +109,7 @@ jobs:
         mkdir -p $DL_DIR/libftdi && cd $DL_DIR/libftdi
         wget "http://www.intra2net.com/en/developer/libftdi/download/libftdi1-${LIBFTDI_VER}.tar.bz2"
         tar -xjf libftdi1-${LIBFTDI_VER}.tar.bz2
-        cd libftdi1-${LIBFTDI_VER} && mkdir build && cd build && cmake -DSTATICLIBS=OFF -DEXAMPLES=OFF -DFTDI_EEPROM=OFF -DCMAKE_INSTALL_PREFIX=/usr .. && make && make install
+        cd libftdi1-${LIBFTDI_VER} && mkdir build && cd build && cmake -DEXAMPLES=OFF -DFTDI_EEPROM=OFF .. && make && make install
         #echo "LIBFTDI_SRC=$PWD/libftdi1-${LIBFTDI_VER}" >> $GITHUB_ENV
 
     - name: Prepare capstone
