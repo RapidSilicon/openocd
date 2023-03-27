@@ -14,33 +14,20 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
 //#define EMULATOR_BUILD
 
-#ifdef LOCAL_BUILD
-#define GEMINI_IDCODE         	0x20000913
-#define GEMINI_DEBUG_CONTROL  	0x80001028
-#define GEMINI_SPARE_REG      	0x800010f0
-#define GEMINI_SRAM_ADDRESS   	0x80002000
-#define GEMINI_LOAD_ADDRESS   	0x80002000
-#endif
-
 #ifdef EMULATOR_BUILD
-#define GEMINI_IDCODE         	0x1000563d
-#define GEMINI_DEBUG_CONTROL  	0xf1000028
 #define GEMINI_SPARE_REG      	0x800000f0
 #define GEMINI_SRAM_ADDRESS   	0x80001000
 #define GEMINI_LOAD_ADDRESS   	0x80001000
-#endif
-
-#if !defined(LOCAL_BUILD) && !defined(EMULATOR_BUILD)
-#define GEMINI_IDCODE         	0x1000563d
-#define GEMINI_DEBUG_CONTROL  	0xf1000028
+#else
 #define GEMINI_SPARE_REG      	0xf10000f0
 #define GEMINI_SRAM_ADDRESS   	0x80000000
 #define GEMINI_LOAD_ADDRESS   	0x00000000
 #endif
 
+#define GEMINI_IDCODE         	0x1000563d
+#define GEMINI_DEBUG_CONTROL  	0xf1000028
 #define GEMINI_SRAM_SIZE	   	(255 * 1024)
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
@@ -51,7 +38,6 @@
 
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
 {
-#ifndef LOCAL_BUILD
 	struct riscv_info * ri = target->arch_info;
 
 	LOG_DEBUG("[RS] Writing 0x%08x to 0x%08x via System Bus on ACPU", value, (uint32_t)address);
@@ -62,10 +48,8 @@ static int gemini_sysbus_write_reg32(struct target * target, target_addr_t addre
 	if (ri->dmi_write(target, DM_SBADDRESS0, address) != ERROR_OK)
 		return ERROR_FAIL;
 
-	//if (ri->dmi_write(target, DM_SBDATA0, value) != ERROR_OK)
-	//    return ERROR_FAIL;
+	// don't care about the return status since the dm is changed to bcpu after this
 	ri->dmi_write(target, DM_SBDATA0, value);
-#endif
 	return ERROR_OK;
 }
 
@@ -204,15 +188,28 @@ static int gemini_get_ddr_status(struct target * target, uint32_t *status)
 
 static int gemini_switch_to_bcpu(struct target * target)
 {
-	LOG_INFO("[RS] Perform switching to BCPU...");
+	uint32_t cpu_type;
+
+	if (gemini_get_cpu_type(target, &cpu_type) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to get connected cpu type");
+		return ERROR_FAIL;
+	}
+
+	if (cpu_type == GEMINI_BCPU)
+	{
+		LOG_INFO("[RS] Connected to BCPU");
+		return ERROR_OK;
+	}
+
+	LOG_INFO("[RS] Perform switching from ACPU to BCPU...");
 
 	if (gemini_sysbus_write_reg32(target, GEMINI_DEBUG_CONTROL, 0) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write debug_control register");
 		return ERROR_FAIL;
 	}
-#ifndef LOCAL_BUILD
-	uint32_t cpu_type;
+
 	jtag_add_tlr();
 	jtag_execute_queue();
 	target->examined = false;
@@ -228,7 +225,7 @@ static int gemini_switch_to_bcpu(struct target * target)
 		LOG_INFO("[RS] Failed to switch to BCPU");
 		return ERROR_FAIL;
 	}
-#endif
+
 	LOG_INFO("[RS] Switched to BCPU");
 
 	return ERROR_OK;
@@ -276,7 +273,20 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	int retval = ERROR_OK;
 	uint8_t *fsbl;
 	uint32_t filesize;
-	uint32_t value;
+	uint32_t status;
+	uint32_t fw_type;
+
+	if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to determine the firmware type");
+		return ERROR_FAIL;
+	}
+
+	if (fw_type == FW_FSBL)
+	{
+		LOG_INFO("[RS] FSBL firmware type detected");
+		return ERROR_OK;
+	}
 
 	LOG_INFO("[RS] Loading FSBL firmware...");
 
@@ -293,10 +303,6 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		return ERROR_FAIL;
 	}
 
-#ifdef LOCAL_BUILD
-	if (filesize > 4096) filesize = 4096;
-#endif
-
 	retval = gemini_write_memory(target, GEMINI_SRAM_ADDRESS, 4, filesize / 4, fsbl);
 	free(fsbl);
 
@@ -305,25 +311,21 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		LOG_ERROR("[RS] Failed to write bitstream of %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 		return ERROR_FAIL;
 	}
-	else
-	{
-		LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
-	}
+
+	LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_FSBL) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_LOAD_FSBL);
 		return ERROR_FAIL;
 	}
-	else
-	{
-		LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_FSBL);
-	}
 
-	if (gemini_poll_command_complete_and_status(target, &value) == ERROR_OK)
+	LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_FSBL);
+
+	if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
-		if (gemini_get_firmware_type(target, &value) != ERROR_OK || value != FW_FSBL)
+		if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK || fw_type != FW_FSBL)
 			retval = ERROR_FAIL;
 	}
 	else
@@ -342,10 +344,25 @@ static int gemini_init_ddr(struct target *target)
 	int retval = ERROR_OK;
 	uint32_t status;
 
+	if (gemini_get_ddr_status(target, &status) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to determine the DDR memory status");
+		return ERROR_FAIL;
+	}
+
+	if (status == DDR_INIT)
+	{
+		LOG_INFO("[RS] DDR memory is already initialized");
+		return ERROR_OK;
+	}
+
 	LOG_INFO("[RS] Initializing DDR memory...");
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_INIT_DDR) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_INIT_DDR);
 		return ERROR_FAIL;
+	}
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
 		retval = ERROR_FAIL;
@@ -366,9 +383,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 
 	LOG_INFO("[RS] Loading bitstream to DDR memory...");
 
-#ifdef LOCAL_BUILD
-	if (filesize > 4096) filesize = 4096;
-#elif defined(EMULATOR_BUILD)
+#ifdef EMULATOR_BUILD
 	if (filesize > 204800) filesize = 204800;
 #endif
 
@@ -407,81 +422,33 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 {
 	struct gemini_pld_device *gemini_info = pld_device->driver_priv;
 	gemini_bit_file_t bit_file;
-	uint32_t fw_type;
-	uint32_t cpu;
-	uint32_t ddr_status;
 
 	if (gemini_read_bit_file(&bit_file, filename) != ERROR_OK)
-		return ERROR_FAIL;
+		return ERROR_PLD_FILE_LOAD_FAILED;
 
 	if (gemini_info->tap->idcode != GEMINI_IDCODE)
 	{
 		LOG_ERROR("[RS] Not gemini device");
 		gemini_free_bit_file(&bit_file);
-		return ERROR_FAIL;
+		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
-	if (gemini_get_cpu_type(gemini_info->target, &cpu) != ERROR_OK)
+	if (gemini_switch_to_bcpu(gemini_info->target) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to get connected cpu type");
 		gemini_free_bit_file(&bit_file);
-		return ERROR_FAIL;
+		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
-	if (cpu == GEMINI_ACPU)
+	if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
 	{
-		LOG_INFO("[RS] Connected to ACPU");
-		if (gemini_switch_to_bcpu(gemini_info->target) != ERROR_OK)
-		{
-			gemini_free_bit_file(&bit_file);
-			return ERROR_FAIL;
-		}
-	}
-	else
-	{
-		LOG_INFO("[RS] Connected to BCPU");
-	}
-
-	if (gemini_get_firmware_type(gemini_info->target, &fw_type) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to determine the firmware type");
 		gemini_free_bit_file(&bit_file);
-		return ERROR_FAIL;
+		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
-	if (fw_type == FW_BOOTROM)
+	if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
 	{
-		LOG_INFO("[RS] Bootrom firmware type detected");
-		if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
-		{
-			gemini_free_bit_file(&bit_file);
-			return ERROR_FAIL;
-		}
-	}
-	else
-	{
-		LOG_INFO("[RS] FSBL firmware type detected");
-	}
-
-	if (gemini_get_ddr_status(gemini_info->target, &ddr_status) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to determine the DDR memory status");
 		gemini_free_bit_file(&bit_file);
-		return ERROR_FAIL;
-	}
-
-	if (ddr_status == DDR_NOT_INIT)
-	{
-		LOG_ERROR("[RS] DDR memory not is initialized");
-		if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
-		{
-			gemini_free_bit_file(&bit_file);
-			return ERROR_FAIL;
-		}
-	}
-	else
-	{
-		LOG_INFO("[RS] DDR memory is already initialized");
+		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
 	if (gemini_program_bitstream(gemini_info->target, &bit_file) != ERROR_OK)
