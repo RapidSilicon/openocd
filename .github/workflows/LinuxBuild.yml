@@ -129,8 +129,8 @@ jobs:
         gcc --version
         mkdir $DL_DIR/openocd
         ./configure --prefix=$DL_DIR/openocd && make -j2 && make install
-        ldd -r $DL_DIR/openocd/bin/openocd
-        $DL_DIR/openocd/bin/openocd -v
+        #ldd -r $DL_DIR/openocd/bin/openocd
+        #$DL_DIR/openocd/bin/openocd -v
         # check if there is tag pointing at HEAD, otherwise take the HEAD SHA-1 as OPENOCD_TAG
         OPENOCD_TAG="`git tag --points-at HEAD`"
         [ -z $OPENOCD_TAG ] && OPENOCD_TAG="`git rev-parse --short HEAD`"
@@ -141,39 +141,33 @@ jobs:
         [[ $RELEASE_NAME = "latest" ]] && IS_PRE_RELEASE="true" || IS_PRE_RELEASE="false"
         # set env and call cross-build.sh
         export OPENOCD_TAG=$OPENOCD_TAG
-        export OPENOCD_SRC=$PWD
-        export OPENOCD_CONFIG=""
+        # prepare the artifact
+        ARTIFACT="openocd-${OPENOCD_TAG}-linux86_64.tar.gz"
+        tar -czf $ARTIFACT $DL_DIR/openocd
+        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+        echo "IS_PRE_RELEASE=$IS_PRE_RELEASE" >> $GITHUB_ENV
+        echo "ARTIFACT_PATH=$PWD/$ARTIFACT" >> $GITHUB_ENV
 
-        #mkdir -p $BUILD_DIR &&  cd $BUILD_DIR
-        #bash $OPENOCD_SRC/contrib/cross-build.sh $HOST
-        ## add missing dlls
-        #cd $HOST-root/usr
-        #cp `$HOST-gcc --print-file-name=libwinpthread-1.dll` ./bin/
-        #cp `$HOST-gcc --print-file-name=libgcc_s_sjlj-1.dll` ./bin/
-        ## prepare the artifact
-        #ARTIFACT="openocd-${OPENOCD_TAG}-${HOST}.tar.gz"
-        #tar -czf $ARTIFACT *
-        #echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
-        #echo "IS_PRE_RELEASE=$IS_PRE_RELEASE" >> $GITHUB_ENV
-        #echo "ARTIFACT_PATH=$PWD/$ARTIFACT" >> $GITHUB_ENV
-
-#    - name: Publish OpenOCD packaged for windows
-#      uses: actions/upload-artifact@v2
-#      with:
-#        path: ${{ env.ARTIFACT_PATH }}
-#    - name: Delete 'latest' Release
-#      uses: dev-drprasad/delete-tag-and-release@v0.2.0
-#      with:
-#        delete_release: true
-#        tag_name: ${{ env.RELEASE_NAME }}
-#      env:
-#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#    - name: Create Release
-#      uses: ncipollo/release-action@v1
-#      with:
-#        tag: ${{ env.RELEASE_NAME }}
-#        commit: ${{ github.sha }}
-#        draft: false
-#        artifacts: ${{ env.ARTIFACT_PATH }}
-#        prerelease: ${{ env.IS_PRE_RELEASE }}
-#        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish OpenOCD packaged for Linux
+      if: "${{ github.ref == 'refs/heads/master' }}"
+      uses: actions/upload-artifact@v2
+      with:
+        path: ${{ env.ARTIFACT_PATH }}
+    - name: Delete 'latest' Release
+      if: "${{ github.ref == 'refs/heads/master' }}"
+      uses: dev-drprasad/delete-tag-and-release@v0.2.0
+      with:
+        delete_release: true
+        tag_name: ${{ env.RELEASE_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release
+      if: "${{ github.ref == 'refs/heads/master' }}"
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ env.RELEASE_NAME }}
+        commit: ${{ github.sha }}
+        draft: false
+        artifacts: ${{ env.ARTIFACT_PATH }}
+        prerelease: ${{ env.IS_PRE_RELEASE }}
+        token: ${{ secrets.GITHUB_TOKEN }}
