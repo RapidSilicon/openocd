@@ -17,24 +17,25 @@
 //#define EMULATOR_BUILD
 
 #ifdef EMULATOR_BUILD
-#define GEMINI_SPARE_REG      	0x800000f0
-#define GEMINI_SRAM_ADDRESS   	0x80001000
-#define GEMINI_LOAD_ADDRESS   	0x80001000
+#define GEMINI_SPARE_REG		0x800000f0
+#define GEMINI_SRAM_ADDRESS		0x80001000
+#define GEMINI_LOAD_ADDRESS		0x80001000
 #else
-#define GEMINI_SPARE_REG      	0xf10000f0
-#define GEMINI_SRAM_ADDRESS   	0x80000000
-#define GEMINI_LOAD_ADDRESS   	0x00000000
+#define GEMINI_SPARE_REG		0xf10000f0
+#define GEMINI_SRAM_ADDRESS		0x80000000
+#define GEMINI_LOAD_ADDRESS		0x00000000
 #endif
 
-#define GEMINI_IDCODE         	0x1000563d
-#define GEMINI_DEBUG_CONTROL  	0xf1000028
-#define GEMINI_SRAM_SIZE	   	(255 * 1024)
+#define GEMINI_IDCODE			0x1000563d
+#define GEMINI_PRODUCT_ID		0x5031
+#define GEMINI_DEBUG_CONTROL	0xf1000028
+#define GEMINI_SRAM_SIZE		(255 * 1024)
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
 #define GEMINI_COMMAND_POLLS	5
-#define DM_SBCS                 0x38
-#define DM_SBADDRESS0           0x39
-#define DM_SBDATA0              0x3c
+#define DM_SBCS					0x38
+#define DM_SBADDRESS0			0x39
+#define DM_SBDATA0				0x3c
 
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
 {
@@ -186,6 +187,24 @@ static int gemini_get_ddr_status(struct target * target, uint32_t *status)
 	return ERROR_FAIL;
 }
 
+static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gemini_bit_file_t *bit_file)
+{
+	if (gemini_info->tap->idcode != GEMINI_IDCODE)
+	{
+		LOG_ERROR("[RS] Not gemini device IDCODE 0x%08x", gemini_info->tap->idcode);
+		return ERROR_FAIL;
+	}
+
+	uint16_t prod_id = (uint16_t)(bit_file->ubi_header->einMsw >> 16);
+	if (prod_id != GEMINI_PRODUCT_ID)
+	{
+		LOG_ERROR("[RS] Invalid gemini product id found in bitstream file 0x%x", prod_id);
+		return ERROR_FAIL;
+	}
+
+	return ERROR_OK;
+}
+
 static int gemini_switch_to_bcpu(struct target * target)
 {
 	uint32_t cpu_type;
@@ -243,7 +262,7 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		retval = gemini_get_command_status(target, status);
 		if (retval != ERROR_OK)
 			break;
-		if (*status != STATUS_IDLE && *status != STATUS_IN_PROGRESS)
+		if (*status != TASK_STATUS_IDLE)
 			break;
 		if (num_polls >= GEMINI_COMMAND_POLLS)
 		{
@@ -257,13 +276,13 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 	// check the command status
 	if (retval == ERROR_OK)
 	{
-		if (*status != STATUS_SUCCESS) {
+		if (*status != TASK_STATUS_SUCCESS) {
 			LOG_ERROR("[RS] Command completed with error %d", *status);
 			retval = ERROR_FAIL;
 		}
 	}
 	// clear command and status field
-	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_IDLE);
+	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_IDLE);
 
 	return retval;
 }
@@ -314,13 +333,13 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_FSBL) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_A) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_LOAD_FSBL);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_A);
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_FSBL);
+	LOG_INFO("[RS] Wrote command %d to spare_reg", TASK_COMMAND_A);
 
 	if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
 	{
@@ -358,9 +377,9 @@ static int gemini_init_ddr(struct target *target)
 
 	LOG_INFO("[RS] Initializing DDR memory...");
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_INIT_DDR) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_A) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_INIT_DDR);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_A);
 		return ERROR_FAIL;
 	}
 
@@ -397,14 +416,14 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 	}
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, COMMAND_LOAD_BITSTREAM) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_C) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", COMMAND_LOAD_BITSTREAM);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_C);
 		return ERROR_FAIL;
 	}
 	else
 	{
-		LOG_INFO("[RS] Wrote command %d to spare_reg", COMMAND_LOAD_BITSTREAM);
+		LOG_INFO("[RS] Wrote command %d to spare_reg", TASK_COMMAND_C);
 	}
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
@@ -426,9 +445,8 @@ static int gemini_load(struct pld_device *pld_device, const char *filename)
 	if (gemini_read_bit_file(&bit_file, filename) != ERROR_OK)
 		return ERROR_PLD_FILE_LOAD_FAILED;
 
-	if (gemini_info->tap->idcode != GEMINI_IDCODE)
+	if (gemini_check_target_device(gemini_info, &bit_file) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Not gemini device");
 		gemini_free_bit_file(&bit_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
