@@ -22,13 +22,12 @@ struct gemini_pld_device {
 #define DDR_NOT_INIT			0
 #define FW_BOOTROM				1
 #define FW_FSBL					2
-#define COMMAND_IDLE			0
-#define COMMAND_LOAD_FSBL		1
-#define COMMAND_INIT_DDR		2
-#define COMMAND_LOAD_BITSTREAM	3
-#define STATUS_IDLE				0
-#define STATUS_IN_PROGRESS		1
-#define STATUS_SUCCESS			2
-#define STATUS_FAIL				3
+#define TASK_COMMAND_IDLE		0
+#define TASK_COMMAND_A			1	/* BootROM to load and jump to FSBL, FSBL to initalize DDR */
+#define TASK_COMMAND_B			2	/* FSBL to program bitstream to QSPI Flash */
+#define TASK_COMMAND_C			3	/* FSBL to program bitstream to FPGA Fabric */
+#define TASK_STATUS_IDLE		0	/* This is mean the command is in progress as well */
+#define TASK_STATUS_SUCCESS		1
+#define TASK_STATUS_FAIL		2
 
 #endif /* OPENOCD_PLD_GEMINI_H */
