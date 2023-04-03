@@ -10,6 +10,7 @@
 
 #include <jtag/jtag.h>
 #include <target/target.h>
+#include <target/target_type.h>
 #include <target/riscv/riscv.h>
 
 struct gemini_pld_device {
