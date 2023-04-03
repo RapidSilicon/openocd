@@ -351,7 +351,11 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		retval = ERROR_FAIL;
 
 	if (retval != ERROR_OK)
+	{
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
+		// reset target to known state
+		target->type->assert_reset(target);
+	}
 	else
 		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s)", filesize);
 
@@ -387,7 +391,11 @@ static int gemini_init_ddr(struct target *target)
 		retval = ERROR_FAIL;
 
 	if (retval != ERROR_OK)
+	{
 		LOG_ERROR("[RS] Failed to initialize DDR memory");
+		// reset target to known state
+		target->type->assert_reset(target);
+	}
 	else
 		LOG_INFO("[RS] DDR memory is initialized successfully");
 
@@ -430,7 +438,11 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		retval = ERROR_FAIL;
 
 	if (retval != ERROR_OK)
+	{
 		LOG_ERROR("[RS] Failed to program bitstream to the device");
+		// reset target to known state
+		target->type->assert_reset(target);
+	}
 	else
 		LOG_INFO("[RS] Device is programmed successfully");
 
