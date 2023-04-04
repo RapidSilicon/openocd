@@ -17,25 +17,27 @@
 //#define EMULATOR_BUILD
 
 #ifdef EMULATOR_BUILD
-#define GEMINI_SPARE_REG		0x800000f0
-#define GEMINI_SRAM_ADDRESS		0x80001000
-#define GEMINI_LOAD_ADDRESS		0x80001000
+#define GEMINI_SPARE_REG		0x8003fffc
+#define GEMINI_LOAD_ADDRESS		0x80020000
+#define GEMINI_SRAM_SIZE		(128 * 1024)
 #else
 #define GEMINI_SPARE_REG		0xf10000f0
-#define GEMINI_SRAM_ADDRESS		0x80000000
 #define GEMINI_LOAD_ADDRESS		0x00000000
+#define GEMINI_SRAM_SIZE		(255 * 1024)
 #endif
 
 #define GEMINI_IDCODE			0x1000563d
 #define GEMINI_PRODUCT_ID		0x5031
 #define GEMINI_DEBUG_CONTROL	0xf1000028
-#define GEMINI_SRAM_SIZE		(255 * 1024)
+#define GEMINI_SRAM_ADDRESS		0x80000000
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
 #define GEMINI_COMMAND_POLLS	5
 #define DM_SBCS					0x38
 #define DM_SBADDRESS0			0x39
 #define DM_SBDATA0				0x3c
+#define DDR_INIT				1
+#define DDR_NOT_INIT			0
 
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
 {
@@ -151,7 +153,7 @@ static int gemini_get_firmware_type(struct target * target, uint32_t *fw_type)
 	if (gemini_read_reg32(target, GEMINI_SPARE_REG, &spare_reg) == ERROR_OK)
 	{
 		spare_reg >>= 29;
-		if (spare_reg == FW_BOOTROM || spare_reg == FW_FSBL)
+		if (spare_reg == GEMINI_PRG_FW_TYPE_BOOTROM || spare_reg == GEMINI_PRG_FW_TYPE_CFG_FSBL)
 		{
 			*fw_type = spare_reg;
 			return ERROR_OK;
@@ -262,7 +264,7 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		retval = gemini_get_command_status(target, status);
 		if (retval != ERROR_OK)
 			break;
-		if (*status != TASK_STATUS_IDLE)
+		if (*status != GEMINI_PRG_ST_PENDING)
 			break;
 		if (num_polls >= GEMINI_COMMAND_POLLS)
 		{
@@ -276,13 +278,13 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 	// check the command status
 	if (retval == ERROR_OK)
 	{
-		if (*status != TASK_STATUS_SUCCESS) {
+		if (*status != GEMINI_PRG_ST_TASK_COMPLETE) {
 			LOG_ERROR("[RS] Command completed with error %d", *status);
 			retval = ERROR_FAIL;
 		}
 	}
 	// clear command and status field
-	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_IDLE);
+	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_IDLE);
 
 	return retval;
 }
@@ -301,7 +303,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		return ERROR_FAIL;
 	}
 
-	if (fw_type == FW_FSBL)
+	if (fw_type == GEMINI_PRG_FW_TYPE_CFG_FSBL)
 	{
 		LOG_INFO("[RS] FSBL firmware type detected");
 		return ERROR_OK;
@@ -333,18 +335,18 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_A) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_A);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote command %d to spare_reg", TASK_COMMAND_A);
+	LOG_INFO("[RS] Wrote command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 
 	if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
-		if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK || fw_type != FW_FSBL)
+		if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK || fw_type != GEMINI_PRG_FW_TYPE_CFG_FSBL)
 			retval = ERROR_FAIL;
 	}
 	else
@@ -353,8 +355,8 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	if (retval != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
-		// reset target to known state
-		target->type->assert_reset(target);
+		if (retval == ERROR_TIMEOUT_REACHED)
+			target->type->assert_reset(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s)", filesize);
@@ -381,9 +383,9 @@ static int gemini_init_ddr(struct target *target)
 
 	LOG_INFO("[RS] Initializing DDR memory...");
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_A) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_A);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 		return ERROR_FAIL;
 	}
 
@@ -393,8 +395,8 @@ static int gemini_init_ddr(struct target *target)
 	if (retval != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to initialize DDR memory");
-		// reset target to known state
-		target->type->assert_reset(target);
+		if (retval == ERROR_TIMEOUT_REACHED)
+			target->type->assert_reset(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] DDR memory is initialized successfully");
@@ -411,7 +413,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	LOG_INFO("[RS] Loading bitstream to DDR memory...");
 
 #ifdef EMULATOR_BUILD
-	if (filesize > 204800) filesize = 204800;
+	if (filesize > 130048) filesize = 130048;
 #endif
 
 	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, filesize / 4, bit_file->rawdata) != ERROR_OK)
@@ -424,14 +426,14 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 	}
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, TASK_COMMAND_C) != ERROR_OK)
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", TASK_COMMAND_C);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA);
 		return ERROR_FAIL;
 	}
 	else
 	{
-		LOG_INFO("[RS] Wrote command %d to spare_reg", TASK_COMMAND_C);
+		LOG_INFO("[RS] Wrote command %d to spare_reg", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA);
 	}
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
@@ -440,8 +442,8 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	if (retval != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to program bitstream to the device");
-		// reset target to known state
-		target->type->assert_reset(target);
+		if (retval == ERROR_TIMEOUT_REACHED)
+			target->type->assert_reset(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] Device is programmed successfully");
