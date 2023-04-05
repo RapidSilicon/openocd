@@ -17,7 +17,7 @@
 //#define EMULATOR_BUILD
 
 #ifdef EMULATOR_BUILD
-#define GEMINI_SPARE_REG		0x8003fffc
+#define GEMINI_SPARE_REG		0x8003fbfc //0x8003fffc
 #define GEMINI_LOAD_ADDRESS		0x80020000
 #define GEMINI_SRAM_SIZE		(128 * 1024)
 #else
@@ -284,7 +284,7 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		}
 	}
 	// clear command and status field
-	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_IDLE);
+	gemini_write_reg32(target, GEMINI_SPARE_REG, /*16*/10, 0, GEMINI_PRG_TSK_CMD_IDLE);
 
 	return retval;
 }
@@ -337,11 +337,11 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
+	LOG_INFO("[RS] Wrote command 0x%x to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 
 	if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
 	{
@@ -385,7 +385,7 @@ static int gemini_init_ddr(struct target *target)
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg", GEMINI_PRG_TSK_CMD_BBF_FDI);
 		return ERROR_FAIL;
 	}
 
@@ -421,20 +421,16 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_ERROR("[RS] Failed to write bitstream (%d bytes) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 		return ERROR_FAIL;
 	}
-	else
-	{
-		LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
-	}
+
+	LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write command %d to spare_reg", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA);
 		return ERROR_FAIL;
 	}
-	else
-	{
-		LOG_INFO("[RS] Wrote command %d to spare_reg", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA);
-	}
+
+	LOG_INFO("[RS] Wrote command 0x%x to spare_reg", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA);
 
 	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
 		retval = ERROR_FAIL;
