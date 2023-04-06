@@ -10,40 +10,65 @@
 
 #include "helper/types.h"
 
-typedef struct ubi_header {
-	uint16_t      ubiHeadrVersion;
-	uint16_t      headerSize;  //ubi header size
-	//External Image number (64bits) :
-	// productId (b[63:48]) | customer build id (b[47:32]) | image version(b[31:0])
-	uint32_t      einMsw;      //External Image version number msb
-	uint32_t      einLsw;      //External Image version number lsb
-	uint8_t       imageType;       
-	uint8_t       packageCount;
-	uint16_t      crc16;
+/**
+ * @struct   rs_ubi_header
+ * @brief    Data structure for Universal Binary Image (UBI) header
+ *
+ */
+typedef struct rs_ubi_header {
+	uint16_t ubi_hdr_version;
+	uint16_t hdr_size;
+	/*                     External Image number (64bits)
+	*                   einMsw                         | einLsw
+	* Product ID b[63:48] | Customer Build ID b[47:32] | Image Version b[31:0] */
+	uint32_t ein_msw;  // Product ID b[63:48] | Customer Build ID b[47:32]
+	uint32_t ein_lsw;  // Image Major Ver b[31:0] | Image Minor Ver b[15:0]
+	uint32_t ubi_size;
+	uint8_t image_type;
+	uint8_t package_count;
+	uint16_t crc_16;
 } __attribute__((packed)) ubi_header_t;
 
-typedef struct bop_header {
-	uint32_t      bopId;        //byte [3:1] 'B','O','P', byte[0] : binary type
-	uint16_t      bopHeaderVersion;    //bop header version 
-	uint16_t      signToolVersion;     //signing tool version
-	uint32_t      binaryVersion;
-	uint32_t      binaryLen;
-	uint32_t      loadAddr;
-	uint32_t      entryAddr;
-	uint32_t      offsetToBinary;
-	uint32_t      offsetToNextHeader;
-	uint8_t       sigAlgo;
-	uint8_t       option;
-	uint8_t       encAlgo;
-	uint8_t       ivLen;     //lenth of iv. (current only supports 16 bytes)
-	uint16_t      pubKeyLen; //
-	uint16_t      encKeyLen; //16 or 32 bytes
-	uint16_t      sigLen;
-	uint8_t       compressionAlgo;
-	uint8_t       binPadBytes; //number of padding bytes in the payload binary or bitstream
-	uint16_t      xcbHeaderSize;
-	uint8_t       padding[16]; // To make BOP header 64 bytes for scatter gather hash calculation
-	uint16_t      crc16;
+/**
+ * @struct   rs_bop_header
+ * @brief    Data structure for Binary Object Protection (BOP) header.
+ *
+ * BOP IDs List
+ * ============
+ * BOPK : Key
+ * BOP1 : FSBL
+ * BOPF : FCB
+ * BOPI : ICB
+ * BOPP : PCB
+ * BOPA : ACPU
+ * BOPU : uboot
+ * BOPL : Linux
+ * BOPZ : Zephyr
+ */
+typedef struct rs_bop_header {
+	uint32_t bop_id;  // byte [3:1] 'B','O','P', byte[0] : binary type
+	uint16_t bop_hdr_version;
+	uint16_t sign_tool_version;
+	uint32_t binary_version;
+	uint32_t binary_len;
+	uint32_t load_addr;
+	uint32_t entry_addr;
+	uint32_t offset_to_binary;
+	uint32_t offset_to_next_header;
+	uint8_t sig_algo;
+	uint8_t option;
+	uint8_t enc_algo;
+	uint8_t iv_len;
+	uint16_t pub_key_len;
+	uint16_t enc_key_len;
+	uint16_t sig_len;
+	uint8_t compression_algo;
+	uint8_t bin_pad_bytes;  // Number of padding bytes in the payload binary or
+							// bitstream
+	uint16_t xcb_header_size;
+	uint8_t padding[16];  // To make BOP header 64 bytes for scatter gather hash
+						// calculation
+	uint16_t crc_16;
 } __attribute__((packed)) bop_header_t;
 
 typedef struct gemini_bit_file
