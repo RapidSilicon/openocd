@@ -359,7 +359,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 			target->type->assert_reset(target); // reset target to known state when command timeout
 	}
 	else
-		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s)", filesize);
+		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s) successfully.", filesize);
 
 	return retval;
 }
@@ -410,11 +410,11 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	uint32_t status;
 	uint32_t filesize = (uint32_t)bit_file->filesize;
 
-	LOG_INFO("[RS] Loading bitstream to DDR memory...");
+	LOG_INFO("[RS] Program bitstream to Gemini device...");
 
-#ifdef EMULATOR_BUILD
-	if (filesize > 130048) filesize = 130048;
-#endif
+// #ifdef EMULATOR_BUILD
+// 	if (filesize > 130048) filesize = 130048;
+// #endif
 
 	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, filesize / 4, bit_file->rawdata) != ERROR_OK)
 	{
