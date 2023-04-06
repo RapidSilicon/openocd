@@ -110,12 +110,12 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename)
 
 	// parse bit file
 	bit_file->ubi_header = (ubi_header_t *)bit_file->rawdata;
-	bit_file->bop_header_list = (bop_header_t **)malloc(sizeof(bop_header_t *) * bit_file->ubi_header->packageCount);
-	header_offset = bit_file->ubi_header->headerSize;
+	bit_file->bop_header_list = (bop_header_t **)malloc(sizeof(bop_header_t *) * bit_file->ubi_header->package_count);
+	header_offset = bit_file->ubi_header->hdr_size;
 
 	// verify ubi header crc
 	uint16_t ubi_header_crc16 = rs_crypto_crc16((const unsigned char *)bit_file->ubi_header, sizeof(ubi_header_t) - 2);
-	if (ubi_header_crc16 != bit_file->ubi_header->crc16)
+	if (ubi_header_crc16 != bit_file->ubi_header->crc_16)
 	{
 		LOG_ERROR("[RS] Invalid UBI Header CRC %x", ubi_header_crc16);
 		free(bit_file->rawdata);
@@ -126,12 +126,13 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename)
 	LOG_INFO("[RS] Input file name '%s'", filename);
 	LOG_INFO("[RS] Input file size %ld byte(s)", bit_file->filesize);
 	LOG_INFO("[RS] UBI Header");
-	LOG_INFO("[RS]  Version %d", bit_file->ubi_header->ubiHeadrVersion);
-	LOG_INFO("[RS]  Size %d", bit_file->ubi_header->headerSize);
-	LOG_INFO("[RS]  Image Type 0x%x", bit_file->ubi_header->imageType);
-	LOG_INFO("[RS]  Package Count %d", bit_file->ubi_header->packageCount);
+	LOG_INFO("[RS]  Version %d", bit_file->ubi_header->ubi_hdr_version);
+	LOG_INFO("[RS]  Header Size %d", bit_file->ubi_header->hdr_size);
+	LOG_INFO("[RS]  UBI Size %d", bit_file->ubi_header->ubi_size);
+	LOG_INFO("[RS]  Image Type 0x%x", bit_file->ubi_header->image_type);
+	LOG_INFO("[RS]  Package Count %d", bit_file->ubi_header->package_count);
 
-	for (uint8_t i = 0; i < bit_file->ubi_header->packageCount; i++)
+	for (uint8_t i = 0; i < bit_file->ubi_header->package_count; i++)
 	{
 		if (header_offset >= (uint32_t)bit_file->filesize)
 		{
@@ -141,11 +142,11 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename)
 		}
 
 		bit_file->bop_header_list[i] = (bop_header_t *)(bit_file->rawdata + header_offset);
-		header_offset += bit_file->bop_header_list[i]->offsetToNextHeader;
+		header_offset += bit_file->bop_header_list[i]->offset_to_next_header;
 
 		// verify bop crc
 		uint16_t bop_header_crc16 = rs_crypto_crc16((const unsigned char *)bit_file->bop_header_list[i], sizeof(bop_header_t) - 2);
-		if (bop_header_crc16 != bit_file->bop_header_list[i]->crc16)
+		if (bop_header_crc16 != bit_file->bop_header_list[i]->crc_16)
 		{
 			free(bit_file->bop_header_list);
 			free(bit_file->rawdata);
@@ -154,11 +155,11 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename)
 		}
 		
 		LOG_INFO("[RS]  BOP Header %d", i);
-		LOG_INFO("[RS]   Id '%.*s'", 4, (char *)&bit_file->bop_header_list[i]->bopId);
-		LOG_INFO("[RS]   Version %d", bit_file->bop_header_list[i]->bopHeaderVersion);
-		LOG_INFO("[RS]   Binary Length %d", bit_file->bop_header_list[i]->binaryLen);
-		LOG_INFO("[RS]   Signing Algorithm 0x%x", bit_file->bop_header_list[i]->sigAlgo);
-		LOG_INFO("[RS]   Encryption 0x%x", bit_file->bop_header_list[i]->encAlgo);
+		LOG_INFO("[RS]   Id '%.*s'", 4, (char *)&bit_file->bop_header_list[i]->bop_id);
+		LOG_INFO("[RS]   Version %d", bit_file->bop_header_list[i]->bop_hdr_version);
+		LOG_INFO("[RS]   Binary Length %d", bit_file->bop_header_list[i]->binary_len);
+		LOG_INFO("[RS]   Signing Algorithm 0x%x", bit_file->bop_header_list[i]->sig_algo);
+		LOG_INFO("[RS]   Encryption 0x%x", bit_file->bop_header_list[i]->enc_algo);
 	}
 
 	return ERROR_OK;
@@ -172,9 +173,9 @@ int gemini_create_helper_bitstream(gemini_bit_file_t *bit_file, uint8_t **bitstr
 	if (!filesize || !bit_file)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	for (uint8_t i = 0; i < bit_file->ubi_header->packageCount; i++)
+	for (uint8_t i = 0; i < bit_file->ubi_header->package_count; i++)
 	{
-		if (memcmp(&bit_file->bop_header_list[i]->bopId, "1POB", 4) == 0)
+		if (memcmp(&bit_file->bop_header_list[i]->bop_id, "1POB", 4) == 0)
 		{
 			bop_fsbl = bit_file->bop_header_list[i];
 			break;
@@ -188,10 +189,13 @@ int gemini_create_helper_bitstream(gemini_bit_file_t *bit_file, uint8_t **bitstr
 	}
 
 	// calculate fsbl bop size
-	if (bop_fsbl->offsetToNextHeader == 0)
-		*filesize = (bit_file->rawdata + bit_file->filesize) - ((uint8_t *)bop_fsbl) + 16;
+	if (bop_fsbl->offset_to_next_header == 0)
+		*filesize = (bit_file->rawdata + bit_file->filesize) - ((uint8_t *)bop_fsbl);
 	else
-		*filesize = bop_fsbl->offsetToNextHeader + 16;
+		*filesize = bop_fsbl->offset_to_next_header;
+
+	// add ubi header size
+	*filesize += sizeof(ubi_header_t);
 
 	// add padding if filesize not 32-bit word aligned
 	if ((*filesize & 0x3) != 0) {
@@ -204,13 +208,14 @@ int gemini_create_helper_bitstream(gemini_bit_file_t *bit_file, uint8_t **bitstr
 	{
 		*bitstream = (uint8_t *)malloc(*filesize);
 		ubi_header_t *ubi_header = (ubi_header_t *)(*bitstream);
-		bop_header_t *bop_header = (bop_header_t *)(*bitstream + 16);
-		memcpy(ubi_header, bit_file->ubi_header, 16);
-		memcpy(bop_header, bop_fsbl, *filesize - 16 - padding);
-		ubi_header->packageCount = 1;
-		ubi_header->crc16 = rs_crypto_crc16((const unsigned char *)ubi_header, sizeof(ubi_header_t) - 2);
-		bop_header->offsetToNextHeader = 0;
-		bop_header->crc16 = rs_crypto_crc16((const unsigned char *)bop_header, sizeof(bop_header_t) - 2);
+		bop_header_t *bop_header = (bop_header_t *)(*bitstream + sizeof(ubi_header_t));
+		memcpy(ubi_header, bit_file->ubi_header, sizeof(ubi_header_t));
+		memcpy(bop_header, bop_fsbl, *filesize - sizeof(ubi_header_t) - padding);
+		ubi_header->package_count = 1;
+		ubi_header->ubi_size = *filesize;
+		ubi_header->crc_16 = rs_crypto_crc16((const unsigned char *)ubi_header, sizeof(ubi_header_t) - 2);
+		bop_header->offset_to_next_header = 0;
+		bop_header->crc_16 = rs_crypto_crc16((const unsigned char *)bop_header, sizeof(bop_header_t) - 2);
 	}
 
 	return ERROR_OK;
