@@ -209,7 +209,7 @@ static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gem
 
 static int gemini_reset_bcpu(struct target * target)
 {
-	LOG_ERROR("[RS] Reseting BCPU...");
+	LOG_INFO("[RS] Reseting BCPU...");
 
 	if (target->type->assert_reset(target) != ERROR_OK)
 	{
@@ -225,7 +225,7 @@ static int gemini_reset_bcpu(struct target * target)
 		return ERROR_FAIL;
 	}
 
-	LOG_ERROR("[RS] Resetted BCPU successfully");
+	LOG_INFO("[RS] Resetted BCPU successfully");
 	return ERROR_OK;
 }
 
