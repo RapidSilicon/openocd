@@ -207,6 +207,28 @@ static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gem
 	return ERROR_OK;
 }
 
+static int gemini_reset_bcpu(struct target * target)
+{
+	LOG_ERROR("[RS] Reseting BCPU...");
+
+	if (target->type->assert_reset(target) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to assert reset signal");
+		return ERROR_FAIL;
+	}
+
+	sleep(1);
+
+	if (target->type->deassert_reset(target) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to de-assert reset signal");
+		return ERROR_FAIL;
+	}
+
+	LOG_ERROR("[RS] Resetted BCPU successfully");
+	return ERROR_OK;
+}
+
 static int gemini_switch_to_bcpu(struct target * target)
 {
 	uint32_t cpu_type;
@@ -356,7 +378,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	{
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
 		if (retval == ERROR_TIMEOUT_REACHED)
-			target->type->assert_reset(target); // reset target to known state when command timeout
+			gemini_reset_bcpu(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s) successfully.", filesize);
@@ -396,7 +418,7 @@ static int gemini_init_ddr(struct target *target)
 	{
 		LOG_ERROR("[RS] Failed to initialize DDR memory");
 		if (retval == ERROR_TIMEOUT_REACHED)
-			target->type->assert_reset(target); // reset target to known state when command timeout
+			gemini_reset_bcpu(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] DDR memory is initialized successfully");
@@ -439,7 +461,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	{
 		LOG_ERROR("[RS] Failed to program bitstream to the device");
 		if (retval == ERROR_TIMEOUT_REACHED)
-			target->type->assert_reset(target); // reset target to known state when command timeout
+			gemini_reset_bcpu(target); // reset target to known state when command timeout
 	}
 	else
 		LOG_INFO("[RS] Device is programmed successfully");
