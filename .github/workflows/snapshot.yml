@@ -94,14 +94,14 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           path: ${{ env.ARTIFACT_PATH }}
-      - name: Delete 'latest' Release
-        if: "${{ github.ref == 'refs/heads/master' }}"
-        uses: dev-drprasad/delete-tag-and-release@v0.2.1
-        with:
-          delete_release: true
-          tag_name: ${{ env.RELEASE_NAME }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Delete 'latest' Release
+      #   if: "${{ github.ref == 'refs/heads/master' }}"
+      #   uses: dev-drprasad/delete-tag-and-release@v0.2.1
+      #   with:
+      #     delete_release: true
+      #     tag_name: ${{ env.RELEASE_NAME }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
         if: "${{ github.ref == 'refs/heads/master' }}"
         uses: ncipollo/release-action@v1
@@ -112,3 +112,4 @@ jobs:
           artifacts: ${{ env.ARTIFACT_PATH }}
           prerelease: ${{ env.IS_PRE_RELEASE }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
