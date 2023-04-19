@@ -365,20 +365,19 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	LOG_INFO("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
 
-	if (gemini_poll_command_complete_and_status(target, &status) == ERROR_OK)
+	retval = gemini_poll_command_complete_and_status(target, &status);
+	if (retval == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
 		if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK || fw_type != GEMINI_PRG_FW_TYPE_CFG_FSBL)
 			retval = ERROR_FAIL;
 	}
-	else
-		retval = ERROR_FAIL;
 
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to load FSBL firmware");
 		if (retval == ERROR_TIMEOUT_REACHED)
 			gemini_reset_bcpu(target); // reset target to known state when command timeout
+		LOG_ERROR("[RS] Failed to load FSBL firmware");
 	}
 	else
 		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s) successfully.", filesize);
@@ -411,14 +410,12 @@ static int gemini_init_ddr(struct target *target)
 		return ERROR_FAIL;
 	}
 
-	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
-		retval = ERROR_FAIL;
-
+	retval = gemini_poll_command_complete_and_status(target, &status);
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to initialize DDR memory");
 		if (retval == ERROR_TIMEOUT_REACHED)
 			gemini_reset_bcpu(target); // reset target to known state when command timeout
+		LOG_ERROR("[RS] Failed to initialize DDR memory");
 	}
 	else
 		LOG_INFO("[RS] DDR memory is initialized successfully");
@@ -454,14 +451,12 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 
 	LOG_INFO("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
 
-	if (gemini_poll_command_complete_and_status(target, &status) != ERROR_OK)
-		retval = ERROR_FAIL;
-
+	retval = gemini_poll_command_complete_and_status(target, &status);
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to program bitstream to the device");
 		if (retval == ERROR_TIMEOUT_REACHED)
 			gemini_reset_bcpu(target); // reset target to known state when command timeout
+		LOG_ERROR("[RS] Failed to program bitstream to the device");
 	}
 	else
 		LOG_INFO("[RS] Device is programmed successfully");
