@@ -68,7 +68,7 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename)
 	}
 
 	// sanity check to see if fsbl_size (if it exists) is within the file content boundary
-	if (bit_file->ubi_header->fsbl_size != 0 && bit_file->ubi_header->fsbl_size > bit_file->filesize)
+	if (bit_file->ubi_header->fsbl_size != 0 && (long)bit_file->ubi_header->fsbl_size > bit_file->filesize)
 	{
 		LOG_ERROR("[RS] Corrupted bitstream content");
 		free(bit_file->ubi_header);
