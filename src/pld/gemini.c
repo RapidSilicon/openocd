@@ -19,7 +19,7 @@
 #ifdef EMULATOR_BUILD
 #define GEMINI_SPARE_REG		0x8003fbfc //0x8003fffc
 #define GEMINI_LOAD_ADDRESS		0x80020000
-#define GEMINI_SRAM_SIZE		(128 * 1024)
+#define GEMINI_SRAM_SIZE		(127 * 1024)
 #else
 #define GEMINI_SPARE_REG		0xf10000f0
 #define GEMINI_LOAD_ADDRESS		0x00000000
@@ -27,7 +27,7 @@
 #endif
 
 #define GEMINI_IDCODE			0x1000563d
-#define GEMINI_PRODUCT_ID		0x5031
+#define GEMINI_PRODUCT_ID		0x31303050
 #define GEMINI_DEBUG_CONTROL	0xf1000028
 #define GEMINI_SRAM_ADDRESS		0x80000000
 #define GEMINI_ACPU				1
@@ -197,10 +197,9 @@ static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gem
 		return ERROR_FAIL;
 	}
 
-	uint16_t prod_id = (uint16_t)(bit_file->ubi_header->ein_msw >> 16);
-	if (prod_id != GEMINI_PRODUCT_ID)
+	if (bit_file->ubi_header->product_id != GEMINI_PRODUCT_ID)
 	{
-		LOG_ERROR("[RS] Invalid gemini product id found in bitstream file 0x%x", prod_id);
+		LOG_ERROR("[RS] Invalid gemini product id found in bitstream file 0x%x", bit_file->ubi_header->product_id);
 		return ERROR_FAIL;
 	}
 
@@ -314,8 +313,8 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 {
 	int retval = ERROR_OK;
-	uint8_t *fsbl;
-	uint32_t filesize;
+	uint32_t fsbl_size = bit_file->ubi_header->fsbl_size;
+	uint32_t size = 1;
 	uint32_t status;
 	uint32_t fw_type;
 
@@ -333,29 +332,31 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	LOG_INFO("[RS] Loading FSBL firmware...");
 
-	if (gemini_create_helper_bitstream(bit_file, &fsbl, &filesize) != ERROR_OK)
+	if (fsbl_size == 0)
 	{
-		LOG_ERROR("[RS] Failed to create helper bitstream");
+		LOG_ERROR("[RS] FSBL BOP not exist in the bitstream");
 		return ERROR_FAIL;
 	}
 
-	if (filesize > GEMINI_SRAM_SIZE)
+	if (fsbl_size > GEMINI_SRAM_SIZE)
 	{
-		LOG_ERROR("[RS] Helper bitstream size (%d bytes) is larger than Gemini available SRAM (%d bytes)", filesize, GEMINI_SRAM_SIZE);
-		free(fsbl);
+		LOG_ERROR("[RS] FSBL bitstream size (%d bytes) is larger than available SRAM (%d bytes)", fsbl_size, GEMINI_SRAM_SIZE);
 		return ERROR_FAIL;
 	}
 
-	retval = gemini_write_memory(target, GEMINI_SRAM_ADDRESS, 4, filesize / 4, fsbl);
-	free(fsbl);
+	if ((fsbl_size % 4) == 0)
+		size = 4;
+	else if ((fsbl_size % 2) == 0)
+		size = 2;
 
+	retval = gemini_write_memory(target, GEMINI_SRAM_ADDRESS, size, fsbl_size / size, (uint8_t *)bit_file->ubi_header);
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write bitstream of %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
+		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote %d byte(s) to SRAM at 0x%08x", filesize, GEMINI_SRAM_ADDRESS);
+	LOG_INFO("[RS] Wrote %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
@@ -380,7 +381,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
 	}
 	else
-		LOG_INFO("[RS] Loaded FSBL firmware of size %d byte(s) successfully.", filesize);
+		LOG_INFO("[RS] Loaded FSBL firmware of size %d bytes successfully.", fsbl_size);
 
 	return retval;
 }
@@ -428,14 +429,16 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	int retval = ERROR_OK;
 	uint32_t status;
 	uint32_t filesize = (uint32_t)bit_file->filesize;
+	uint32_t size = 1;
 
 	LOG_INFO("[RS] Program bitstream to Gemini device...");
 
-// #ifdef EMULATOR_BUILD
-// 	if (filesize > 130048) filesize = 130048;
-// #endif
+	if ((filesize % 4) == 0)
+		size = 4;
+	else if ((filesize % 2) == 0)
+		size = 2;
 
-	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, 4, filesize / 4, bit_file->rawdata) != ERROR_OK)
+	if (gemini_write_memory(target, GEMINI_LOAD_ADDRESS, size, filesize / size, (uint8_t *)bit_file->ubi_header) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write bitstream (%d bytes) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 		return ERROR_FAIL;
