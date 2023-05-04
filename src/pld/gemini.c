@@ -280,7 +280,7 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 
 	while (1)
 	{
-		LOG_INFO("[RS] Poll command status #%d...", ++num_polls);
+		LOG_DEBUG("[RS] Poll command status #%d...", ++num_polls);
 
 		retval = gemini_get_command_status(target, status);
 		if (retval != ERROR_OK)
@@ -356,7 +356,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
+	LOG_DEBUG("[RS] Wrote %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
@@ -364,7 +364,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
+	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
 
 	retval = gemini_poll_command_complete_and_status(target, &status);
 	if (retval == ERROR_OK)
@@ -431,7 +431,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	uint32_t filesize = (uint32_t)bit_file->filesize;
 	uint32_t size = 1;
 
-	LOG_INFO("[RS] Program bitstream to Gemini device...");
+	LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
 
 	if ((filesize % 4) == 0)
 		size = 4;
@@ -444,7 +444,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote %d byte(s) to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
+	LOG_DEBUG("[RS] Wrote %d bytes to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
 	{
@@ -452,7 +452,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		return ERROR_FAIL;
 	}
 
-	LOG_INFO("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
+	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
 
 	retval = gemini_poll_command_complete_and_status(target, &status);
 	if (retval != ERROR_OK)
