@@ -462,7 +462,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_ERROR("[RS] Failed to program bitstream to the device");
 	}
 	else
-		LOG_INFO("[RS] Device is programmed successfully");
+		LOG_INFO("[RS] Gemini FPGA fabric is configured successfully");
 
 	return retval;
 }
