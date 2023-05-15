@@ -39,6 +39,11 @@
 #define DDR_INIT				1
 #define DDR_NOT_INIT			0
 
+enum gemini_prg_mode {
+	GEMINI_PRG_MODE_FPGA,
+	GEMINI_PRG_MODE_SPI_FLASH
+};
+
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
 {
 	struct riscv_info * ri = target->arch_info;
@@ -424,12 +429,13 @@ static int gemini_init_ddr(struct target *target)
 	return retval;
 }
 
-static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bit_file)
+static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bit_file, enum gemini_prg_mode mode)
 {
 	int retval = ERROR_OK;
 	uint32_t status;
 	uint32_t filesize = (uint32_t)bit_file->filesize;
 	uint32_t size = 1;
+	uint32_t task_cmd = 0;
 
 	LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
 
@@ -446,13 +452,18 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 
 	LOG_DEBUG("[RS] Wrote %d bytes to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
+	if (mode == GEMINI_PRG_MODE_SPI_FLASH)
+		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH;
+	else
+		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA;
+
+	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, task_cmd) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08x", task_cmd, GEMINI_SPARE_REG);
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
+	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08x", task_cmd, GEMINI_SPARE_REG);
 
 	retval = gemini_poll_command_complete_and_status(target, &status);
 	if (retval != ERROR_OK)
@@ -467,47 +478,40 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	return retval;
 }
 
-static int gemini_load(struct pld_device *pld_device, const char *filename)
+static int gemini_program_device(struct pld_device *pld_device, const char *filename, enum gemini_prg_mode mode)
 {
 	struct gemini_pld_device *gemini_info = pld_device->driver_priv;
 	gemini_bit_file_t bit_file;
+	int retval = ERROR_PLD_FILE_LOAD_FAILED;
 
 	if (gemini_read_bit_file(&bit_file, filename) != ERROR_OK)
 		return ERROR_PLD_FILE_LOAD_FAILED;
 
 	if (gemini_check_target_device(gemini_info, &bit_file) != ERROR_OK)
-	{
-		gemini_free_bit_file(&bit_file);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
+		goto err;
 
 	if (gemini_switch_to_bcpu(gemini_info->target) != ERROR_OK)
-	{
-		gemini_free_bit_file(&bit_file);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
+		goto err;
 
 	if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
-	{
-		gemini_free_bit_file(&bit_file);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
+		goto err;
 
 	if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
-	{
-		gemini_free_bit_file(&bit_file);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
+		goto err;
 
-	if (gemini_program_bitstream(gemini_info->target, &bit_file) != ERROR_OK)
-	{
-		gemini_free_bit_file(&bit_file);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
+	if (gemini_program_bitstream(gemini_info->target, &bit_file, mode) != ERROR_OK)
+		goto err;
 
+	// everything is completed successfully
+	retval = ERROR_OK;
+err:
 	gemini_free_bit_file(&bit_file);
+	return retval;
+}
 
-	return ERROR_OK;
+static int gemini_load(struct pld_device *pld_device, const char *filename)
+{
+	return gemini_program_device(pld_device, filename, GEMINI_PRG_MODE_FPGA);
 }
 
 PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
@@ -537,8 +541,61 @@ PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(gemini_handle_load_command)
+{
+	struct pld_device *device;
+	uint32_t retval;
+	unsigned int dev_id;
+	enum gemini_prg_mode mode;
+
+	if (CMD_ARGC < 3)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
+	device = get_pld_device_by_num(dev_id);
+	if (!device) {
+		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+		return ERROR_FAIL;
+	}
+
+	if (!strcmp(CMD_ARGV[2], "fpga"))
+		mode = GEMINI_PRG_MODE_FPGA;
+	else if (!strcmp(CMD_ARGV[2], "flash"))
+		mode = GEMINI_PRG_MODE_SPI_FLASH;
+	else {
+		command_print(CMD, "invalid mode '#%s'. supported modes are 'flash' and 'fpga'", CMD_ARGV[1]);
+		return ERROR_FAIL;
+	}
+
+	retval = gemini_program_device(device, CMD_ARGV[1], mode);
+	return retval;
+}
+
+static const struct command_registration gemini_exec_command_handlers[] = {
+	{
+		.name = "load",
+		.mode = COMMAND_EXEC,
+		.handler = gemini_handle_load_command,
+		.help = "program/configure bitstream into spi flash or fpga fabric",
+		.usage = "index filepath mode",
+	},
+	COMMAND_REGISTRATION_DONE
+};
+
+static const struct command_registration gemini_command_handler[] = {
+	{
+		.name = "gemini",
+		.mode = COMMAND_ANY,
+		.help = "Rapid Silicon Gemini specific commands",
+		.usage = "",
+		.chain = gemini_exec_command_handlers,
+	},
+	COMMAND_REGISTRATION_DONE
+};
+
 struct pld_driver gemini_pld = {
 	.name = "gemini",
+	.commands = gemini_command_handler,
 	.pld_device_command = &gemini_pld_device_command,
 	.load = &gemini_load,
 };
