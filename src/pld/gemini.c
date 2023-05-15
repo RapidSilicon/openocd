@@ -32,7 +32,7 @@
 #define GEMINI_SRAM_ADDRESS		0x80000000
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
-#define GEMINI_COMMAND_POLLS	5
+#define GEMINI_COMMAND_POLLS	120
 #define DM_SBCS					0x38
 #define DM_SBADDRESS0			0x39
 #define DM_SBDATA0				0x3c
@@ -285,14 +285,14 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 
 	while (1)
 	{
-		LOG_DEBUG("[RS] Poll command status #%d...", ++num_polls);
+		LOG_DEBUG("[RS] Poll command status #%d...", num_polls);
 
 		retval = gemini_get_command_status(target, status);
 		if (retval != ERROR_OK)
 			break;
 		if (*status != GEMINI_PRG_ST_PENDING)
 			break;
-		if (num_polls >= GEMINI_COMMAND_POLLS)
+		if (++num_polls >= GEMINI_COMMAND_POLLS)
 		{
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
 			retval = ERROR_TIMEOUT_REACHED;
@@ -437,7 +437,10 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	uint32_t size = 1;
 	uint32_t task_cmd = 0;
 
-	LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
+	if (mode == GEMINI_PRG_MODE_FPGA)
+		LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
+	else
+		LOG_INFO("[RS] Programming SPI Flash...");
 
 	if ((filesize % 4) == 0)
 		size = 4;
@@ -473,7 +476,12 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		LOG_ERROR("[RS] Failed to program bitstream to the device");
 	}
 	else
-		LOG_INFO("[RS] Gemini FPGA fabric is configured successfully");
+	{
+		if (mode == GEMINI_PRG_MODE_FPGA)
+			LOG_INFO("[RS] Configured Gemini FPGA fabric successfully");
+		else
+			LOG_INFO("[RS] Programmed SPI Flash successfully");
+	}
 
 	return retval;
 }
@@ -543,10 +551,13 @@ PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
 
 COMMAND_HANDLER(gemini_handle_load_command)
 {
+	struct timeval start, end, duration;
 	struct pld_device *device;
-	uint32_t retval;
+	int retval;
 	unsigned int dev_id;
 	enum gemini_prg_mode mode;
+
+	gettimeofday(&start, NULL);
 
 	if (CMD_ARGC < 3)
 		return ERROR_COMMAND_SYNTAX_ERROR;
@@ -564,10 +575,19 @@ COMMAND_HANDLER(gemini_handle_load_command)
 		mode = GEMINI_PRG_MODE_SPI_FLASH;
 	else {
 		command_print(CMD, "invalid mode '#%s'. supported modes are 'flash' and 'fpga'", CMD_ARGV[1]);
-		return ERROR_FAIL;
+		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
 	retval = gemini_program_device(device, CMD_ARGV[1], mode);
+	if (retval != ERROR_OK)
+		command_print(CMD, "failed loading file %s to pld device %u", CMD_ARGV[1], dev_id);
+	else {
+		gettimeofday(&end, NULL);
+		timeval_subtract(&duration, &end, &start);
+		command_print(CMD, "loaded file %s to pld device %u in %jis %jius", CMD_ARGV[1], dev_id,
+			(intmax_t)duration.tv_sec, (intmax_t)duration.tv_usec);
+	}
+
 	return retval;
 }
 
