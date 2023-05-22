@@ -318,7 +318,7 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 	if (retval == ERROR_OK)
 	{
 		if (*status != GEMINI_PRG_ST_TASK_COMPLETE) {
-			LOG_ERROR("[RS] Command completed with error %d", *status);
+			LOG_ERROR("[RS] Command error %d", *status);
 			retval = ERROR_FAIL;
 		}
 	}
@@ -499,8 +499,10 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 			if (retval == ERROR_OK) {
 				if (cfg_done == 1 && cfg_error == 0)
 					LOG_INFO("[RS] Configured FPGA fabric successfully");
-				else
+				else {
 					LOG_ERROR("[RS] FPGA fabric configuration error (cfg_done = %d, cfg_error = %d)", cfg_done, cfg_error);
+					retval = ERROR_FAIL;
+				}
 			}
 		}
 		else
@@ -622,7 +624,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 	uint32_t cfg_done;
 	uint32_t cfg_error;
 
-	if (CMD_ARGC < 3)
+	if (CMD_ARGC < 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
