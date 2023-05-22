@@ -30,6 +30,7 @@
 #define GEMINI_PRODUCT_ID		0x31303050
 #define GEMINI_DEBUG_CONTROL	0xf1000028
 #define GEMINI_SRAM_ADDRESS		0x80000000
+#define GEMINI_CFG_STATUS		0xf10a0000
 #define GEMINI_ACPU				1
 #define GEMINI_BCPU				0
 #define GEMINI_COMMAND_POLLS	120
@@ -208,6 +209,18 @@ static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gem
 		return ERROR_FAIL;
 	}
 
+	return ERROR_OK;
+}
+
+static int gemini_get_confg_status(struct target * target, uint32_t *cfg_done, uint32_t *cfg_error)
+{
+	uint32_t cfg_status;
+
+	if (gemini_read_reg32(target, GEMINI_CFG_STATUS, &cfg_status) != ERROR_OK)
+		return ERROR_FAIL;
+
+	*cfg_done = (cfg_status >> 7) & 0x1;
+	*cfg_error = (cfg_status >> 15) & 0x1;
 	return ERROR_OK;
 }
 
@@ -436,6 +449,8 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	uint32_t filesize = (uint32_t)bit_file->filesize;
 	uint32_t size = 1;
 	uint32_t task_cmd = 0;
+	uint32_t cfg_done;
+	uint32_t cfg_error;
 
 	if (mode == GEMINI_PRG_MODE_FPGA)
 		LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
@@ -478,7 +493,16 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	else
 	{
 		if (mode == GEMINI_PRG_MODE_FPGA)
-			LOG_INFO("[RS] Configured Gemini FPGA fabric successfully");
+		{
+			// check configuration done and error status
+			retval = gemini_get_confg_status(target, &cfg_done, &cfg_error);
+			if (retval == ERROR_OK) {
+				if (cfg_done == 1 && cfg_error == 0)
+					LOG_INFO("[RS] Configured FPGA fabric successfully");
+				else
+					LOG_ERROR("[RS] FPGA fabric configuration error (cfg_done = %d, cfg_error = %d)", cfg_done, cfg_error);
+			}
+		}
 		else
 			LOG_INFO("[RS] Programmed SPI Flash successfully");
 	}
@@ -569,26 +593,53 @@ COMMAND_HANDLER(gemini_handle_load_command)
 		return ERROR_FAIL;
 	}
 
-	if (!strcmp(CMD_ARGV[2], "fpga"))
+	if (!strcmp(CMD_ARGV[1], "fpga"))
 		mode = GEMINI_PRG_MODE_FPGA;
-	else if (!strcmp(CMD_ARGV[2], "flash"))
+	else if (!strcmp(CMD_ARGV[1], "flash"))
 		mode = GEMINI_PRG_MODE_SPI_FLASH;
 	else {
-		command_print(CMD, "invalid mode '#%s'. supported modes are 'flash' and 'fpga'", CMD_ARGV[1]);
+		command_print(CMD, "invalid mode '#%s'. supported modes are 'flash' and 'fpga' only", CMD_ARGV[1]);
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
-	retval = gemini_program_device(device, CMD_ARGV[1], mode);
+	retval = gemini_program_device(device, CMD_ARGV[2], mode);
 	if (retval != ERROR_OK)
-		command_print(CMD, "failed loading file %s to pld device %u", CMD_ARGV[1], dev_id);
+		command_print(CMD, "failed loading file %s to pld device %u", CMD_ARGV[2], dev_id);
 	else {
 		gettimeofday(&end, NULL);
 		timeval_subtract(&duration, &end, &start);
-		command_print(CMD, "loaded file %s to pld device %u in %jis %jius", CMD_ARGV[1], dev_id,
+		command_print(CMD, "loaded file %s to pld device %u in %jis %jius", CMD_ARGV[2], dev_id,
 			(intmax_t)duration.tv_sec, (intmax_t)duration.tv_usec);
 	}
 
 	return retval;
+}
+
+COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
+{
+	struct pld_device *device;
+	unsigned int dev_id;
+	uint32_t cfg_done;
+	uint32_t cfg_error;
+
+	if (CMD_ARGC < 3)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
+	device = get_pld_device_by_num(dev_id);
+	if (!device) {
+		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+		return ERROR_FAIL;
+	}
+
+	if (gemini_get_confg_status(((struct gemini_pld_device *)(device->driver_priv))->target, &cfg_done, &cfg_error) != ERROR_OK)
+		return ERROR_FAIL;
+
+	// print cfg done and error status
+	command_print(CMD, "cfg_done %d", cfg_done);
+	command_print(CMD, "cfg_error %d", cfg_error);
+
+	return ERROR_OK;
 }
 
 static const struct command_registration gemini_exec_command_handlers[] = {
@@ -598,6 +649,13 @@ static const struct command_registration gemini_exec_command_handlers[] = {
 		.handler = gemini_handle_load_command,
 		.help = "program/configure bitstream into spi flash or fpga fabric",
 		.usage = "index filepath mode",
+	},
+	{
+		.name = "status",
+		.mode = COMMAND_EXEC,
+		.handler = gemini_handle_get_cfg_status_command,
+		.help = "get fpga configration done and error status",
+		.usage = "index",
 	},
 	COMMAND_REGISTRATION_DONE
 };
