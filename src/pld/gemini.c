@@ -212,7 +212,7 @@ static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gem
 	return ERROR_OK;
 }
 
-static int gemini_get_confg_status(struct target * target, uint32_t *cfg_done, uint32_t *cfg_error)
+static int gemini_get_config_status(struct target * target, uint32_t *cfg_done, uint32_t *cfg_error)
 {
 	uint32_t cfg_status;
 
@@ -453,9 +453,15 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	uint32_t cfg_error;
 
 	if (mode == GEMINI_PRG_MODE_FPGA)
-		LOG_INFO("[RS] Configuring Gemini FPGA fabric...");
+	{
+		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA;
+		LOG_INFO("[RS] Configuring FPGA fabric...");
+	}
 	else
+	{
+		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH;
 		LOG_INFO("[RS] Programming SPI Flash...");
+	}
 
 	if ((filesize % 4) == 0)
 		size = 4;
@@ -469,11 +475,6 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	}
 
 	LOG_DEBUG("[RS] Wrote %d bytes to DDR memory at 0x%08x", filesize, GEMINI_LOAD_ADDRESS);
-
-	if (mode == GEMINI_PRG_MODE_SPI_FLASH)
-		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH;
-	else
-		task_cmd = GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA;
 
 	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, task_cmd) != ERROR_OK)
 	{
@@ -495,11 +496,13 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		if (mode == GEMINI_PRG_MODE_FPGA)
 		{
 			// check configuration done and error status
-			retval = gemini_get_confg_status(target, &cfg_done, &cfg_error);
-			if (retval == ERROR_OK) {
+			retval = gemini_get_config_status(target, &cfg_done, &cfg_error);
+			if (retval == ERROR_OK)
+			{
 				if (cfg_done == 1 && cfg_error == 0)
 					LOG_INFO("[RS] Configured FPGA fabric successfully");
-				else {
+				else
+				{
 					LOG_ERROR("[RS] FPGA fabric configuration error (cfg_done = %d, cfg_error = %d)", cfg_done, cfg_error);
 					retval = ERROR_FAIL;
 				}
@@ -634,7 +637,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 		return ERROR_FAIL;
 	}
 
-	if (gemini_get_confg_status(((struct gemini_pld_device *)(device->driver_priv))->target, &cfg_done, &cfg_error) != ERROR_OK)
+	if (gemini_get_config_status(((struct gemini_pld_device *)(device->driver_priv))->target, &cfg_done, &cfg_error) != ERROR_OK)
 		return ERROR_FAIL;
 
 	// print cfg done and error status
