@@ -672,8 +672,8 @@ COMMAND_HANDLER(gemini_handle_list_device_command)
 	int i = 0;
 
 	// print header
-	command_print(CMD, "      Device               ID           IRLen     ");
-	command_print(CMD, "----- -------------------- ------------ ----------");
+	command_print(CMD, "         Device               ID           IRLen     ");
+	command_print(CMD, "-------- -------------------- ------------ ----------");
 
 	while (1)
 	{
@@ -688,7 +688,7 @@ COMMAND_HANDLER(gemini_handle_list_device_command)
 		if (gemini_device->tap)
 		{
 			// print device details
-			command_print(CMD, "%5d %-20s 0x%-10x %-10d", i, get_product_name_by_idcode(gemini_device->tap->idcode),
+			command_print(CMD, "Found %2d %-20s 0x%-10x %-10d", i, get_product_name_by_idcode(gemini_device->tap->idcode),
 							gemini_device->tap->idcode,
 							gemini_device->tap->ir_length);
 		}
