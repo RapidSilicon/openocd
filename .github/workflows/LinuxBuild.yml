@@ -18,7 +18,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential autoconf texinfo automake libtool libusb-1.0-0 libusb-1.0-0-dev libftdi-dev
     - run: ./bootstrap
-    - run: ./configure
+    - run: ./configure --enable-remote-bitbang --enable-jlink --enable-internal-libjaylink --enable-jtag-vpi
     - run: make
     - run: file src/openocd | grep 64-bit
     - run: ./src/openocd -v
@@ -128,7 +128,7 @@ jobs:
         source /opt/rh/devtoolset-11/enable
         gcc --version
         mkdir $DL_DIR/openocd
-        ./configure --prefix=$DL_DIR/openocd && make -j2 && make install
+        ./configure --prefix=$DL_DIR/openocd --enable-remote-bitbang --enable-jlink --enable-internal-libjaylink --enable-jtag-vpi && make -j2 && make install
         #ldd -r $DL_DIR/openocd/bin/openocd
         #$DL_DIR/openocd/bin/openocd -v
         # check if there is tag pointing at HEAD, otherwise take the HEAD SHA-1 as OPENOCD_TAG
