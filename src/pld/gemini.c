@@ -620,9 +620,22 @@ COMMAND_HANDLER(gemini_handle_load_command)
 	return retval;
 }
 
+static char *get_product_name_by_idcode(uint32_t idcode)
+{
+	switch (idcode)
+	{
+		case GEMINI_IDCODE:
+			return "Gemini";
+		default:
+			break;
+	}
+	return "Unknown";
+}
+
 COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 {
-	struct pld_device *device;
+	struct pld_device *device = NULL;
+	struct gemini_pld_device *gemini_device = NULL;
 	unsigned int dev_id;
 	uint32_t cfg_done;
 	uint32_t cfg_error;
@@ -637,12 +650,50 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 		return ERROR_FAIL;
 	}
 
-	if (gemini_get_config_status(((struct gemini_pld_device *)(device->driver_priv))->target, &cfg_done, &cfg_error) != ERROR_OK)
+	gemini_device = (struct gemini_pld_device *)(device->driver_priv);
+
+	if (gemini_get_config_status(gemini_device->target, &cfg_done, &cfg_error) != ERROR_OK)
 		return ERROR_FAIL;
 
+	// print header
+	command_print(CMD, "      Device               cfg_done   cfg_error ");
+	command_print(CMD, "----- -------------------- ---------- ----------");
+
 	// print cfg done and error status
-	command_print(CMD, "cfg_done %d", cfg_done);
-	command_print(CMD, "cfg_error %d", cfg_error);
+	command_print(CMD, "%5d %-20s %-10d %-10d", dev_id, get_product_name_by_idcode(gemini_device->tap->idcode), cfg_done, cfg_error);
+
+	return ERROR_OK;
+}
+
+COMMAND_HANDLER(gemini_handle_list_device_command)
+{
+	struct pld_device *device = NULL;
+	struct gemini_pld_device *gemini_device = NULL;
+	int i = 0;
+
+	// print header
+	command_print(CMD, "         Device               ID           IRLen     ");
+	command_print(CMD, "-------- -------------------- ------------ ----------");
+
+	while (1)
+	{
+		device = get_pld_device_by_num(i);
+		if (!device)
+			break;
+
+		if (strcmp(device->driver->name, "gemini") != 0)
+			continue;
+
+		gemini_device = (struct gemini_pld_device *)(device->driver_priv);
+		if (gemini_device->tap)
+		{
+			// print device details
+			command_print(CMD, "Found %2d %-20s 0x%-10x %-10d", i, get_product_name_by_idcode(gemini_device->tap->idcode),
+							gemini_device->tap->idcode,
+							gemini_device->tap->ir_length);
+		}
+		++i;
+	}
 
 	return ERROR_OK;
 }
@@ -660,6 +711,13 @@ static const struct command_registration gemini_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.handler = gemini_handle_get_cfg_status_command,
 		.help = "get fpga configration done and error status",
+		.usage = "index",
+	},
+	{
+		.name = "list",
+		.mode = COMMAND_EXEC,
+		.handler = gemini_handle_list_device_command,
+		.help = "list all devices",
 		.usage = "index",
 	},
 	COMMAND_REGISTRATION_DONE
