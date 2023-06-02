@@ -76,7 +76,7 @@ jobs:
           # set env and call cross-build.sh
           export OPENOCD_TAG=$OPENOCD_TAG
           export OPENOCD_SRC=$PWD
-          export OPENOCD_CONFIG=""
+          export OPENOCD_CONFIG="--enable-remote-bitbang --enable-jlink --enable-internal-libjaylink --enable-jtag-vpi"
           mkdir -p $BUILD_DIR &&  cd $BUILD_DIR
           bash $OPENOCD_SRC/contrib/cross-build.sh $HOST
           # add missing dlls
