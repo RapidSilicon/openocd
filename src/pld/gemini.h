@@ -18,6 +18,17 @@ struct gemini_pld_device {
 	struct jtag_tap *tap;
 };
 
+struct gemini_stats {
+	uint64_t total_packages_size;
+	uint64_t data_sent;
+	uint32_t cicular_buffer_full_count;
+	uint8_t package_count;
+	uint8_t log;
+	uint32_t wait_time_us;
+	uint64_t total_overall_us;
+	uint64_t total_us;
+};
+
 /* bootrom/fsbl command and status definitions */
 enum gemini_prg_tsk_cmd {
 	GEMINI_PRG_TSK_CMD_IDLE = 0x0,
