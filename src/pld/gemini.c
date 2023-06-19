@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-#define LOCAL_BUILD
+//#define LOCAL_BUILD
 
 #ifdef LOCAL_BUILD
 #	define GEMINI_IDCODE		0x20000913
@@ -720,7 +720,7 @@ static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_fi
 
 	if ((filesize % GEMINI_BLOCK_SIZE) != 0)
 	{
-		LOG_WARNING("[RS] Bitstream file size %ld is not multiple of 2k blocks", filesize);
+		LOG_WARNING("[RS] Bitstream file size %" PRIu64 " is not multiple of 2k blocks", filesize);
 		filesize += (GEMINI_BLOCK_SIZE - (filesize % GEMINI_BLOCK_SIZE));
 	}
 
