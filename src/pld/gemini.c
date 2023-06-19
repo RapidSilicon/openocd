@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
+#define LOCAL_BUILD
 
 #ifdef LOCAL_BUILD
 #	define GEMINI_IDCODE		0x20000913
@@ -479,15 +479,15 @@ static void gemini_print_stats(struct gemini_stats *stats)
 	uint64_t avg = stats->total_us / num_blocks;
 
 	LOG_INFO("[RS] -- Statistic -----------------------------------------------------------");
-	LOG_INFO("[RS]    1. total_packages_size        : %ld", stats->total_packages_size);
+	LOG_INFO("[RS]    1. total_packages_size        : %" PRIu64, stats->total_packages_size);
 	LOG_INFO("[RS]    2. package_count              : %d" , stats->package_count);
-	LOG_INFO("[RS]    3. data_sent                  : %ld", stats->data_sent);
+	LOG_INFO("[RS]    3. data_sent                  : %" PRIu64, stats->data_sent);
 	LOG_INFO("[RS]    4. cicular_buffer_full_count  : %d" , stats->cicular_buffer_full_count);
-	LOG_INFO("[RS]    5. total_blocks               : %ld", num_blocks);
-	LOG_INFO("[RS]    6. total_us                   : %ld (%f sec)", stats->total_us, stats->total_us / 1000000.0);
-	LOG_INFO("[RS]    7. total_overall_us           : %ld (%f sec)", stats->total_overall_us, stats->total_overall_us / 1000000.0);
-	LOG_INFO("[RS]    8. total_wait_us              : %ld (%f sec)", stats->total_overall_us - stats->total_us, (stats->total_overall_us - stats->total_us) / 1000000.0);
-	LOG_INFO("[RS]    9. average us @ block         : %ld (%f sec)", avg, avg / 1000000.0);
+	LOG_INFO("[RS]    5. total_blocks               : %" PRIu64, num_blocks);
+	LOG_INFO("[RS]    6. total_us                   : %" PRIu64 " (%f sec)", stats->total_us, stats->total_us / 1000000.0);
+	LOG_INFO("[RS]    7. total_overall_us           : %" PRIu64 " (%f sec)", stats->total_overall_us, stats->total_overall_us / 1000000.0);
+	LOG_INFO("[RS]    8. total_wait_us              : %" PRIu64 " (%f sec)", stats->total_overall_us - stats->total_us, (stats->total_overall_us - stats->total_us) / 1000000.0);
+	LOG_INFO("[RS]    9. average us @ block         : %" PRIu64 " (%f sec)", avg, avg / 1000000.0);
 	LOG_INFO("[RS]   10. transfer rate              : %.5f kbps", stats->data_sent / (1024.0 * (stats->total_overall_us / 1000000.0)));
 }
 
@@ -586,7 +586,7 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 			}
 
 			if (stats->log & 1)
-				LOG_INFO("[RS] Progress %.2f%% (%ld/%ld bytes)", ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0, stats->data_sent, stats->total_packages_size);
+				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0, stats->data_sent, stats->total_packages_size);
 
 			timeout_counter = 0;
 		}
@@ -714,10 +714,17 @@ static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_fi
 	int retval = ERROR_OK;
 	uint32_t status;
 	struct gemini_stats stats = { 0 };
+	uint64_t filesize = (uint64_t)bit_file->filesize;
 
 	LOG_INFO("[RS] Programming SPI Flash...");
 
-	stats.total_packages_size = (uint64_t)bit_file->filesize;
+	if ((filesize % GEMINI_BLOCK_SIZE) != 0)
+	{
+		LOG_WARNING("[RS] Bitstream file size %ld is not multiple of 2k blocks", filesize);
+		filesize += (GEMINI_BLOCK_SIZE - (filesize % GEMINI_BLOCK_SIZE));
+	}
+
+	stats.total_packages_size = filesize;
 	stats.data_sent = 0;
 	stats.package_count = 1;
 	stats.cicular_buffer_full_count = 0;
@@ -736,7 +743,7 @@ static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_fi
 	}
 
 	// stream 2k data block to device
-	if (gemini_stream_data_blocks(target, (uint8_t *)bit_file->ubi_header, (uint64_t)bit_file->filesize, &stats) != ERROR_OK)
+	if (gemini_stream_data_blocks(target, (uint8_t *)bit_file->ubi_header, filesize, &stats) != ERROR_OK)
 		return ERROR_FAIL;
 
 	if (stats.log & 2)
