@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
+#define LOCAL_BUILD
 
 #ifdef LOCAL_BUILD
 #	define GEMINI_IDCODE		0x20000913
@@ -29,9 +29,9 @@
 #	define GEMINI_DEBUG_CONTROL	0xf1000028
 #	define GEMINI_SPARE_REG		0xf10000f0
 #	define GEMINI_CFG_STATUS	0xf10a0000
-#	define GEMINI_BUFFER_BASE	0x00000000	// to be defined by fw
-#	define GEMINI_WRITE_COUNTER	0x00000000	// to be defined by fw
-#	define GEMINI_READ_COUNTER	0x00000000	// to be defined by dw
+#	define GEMINI_BUFFER_BASE	0x8001DC00
+#	define GEMINI_WRITE_COUNTER	0x8001FC00
+#	define GEMINI_READ_COUNTER	0x8001FC04
 #endif
 
 #define GEMINI_PRODUCT_ID		0x31303050
