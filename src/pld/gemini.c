@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-#define LOCAL_BUILD
+//#define LOCAL_BUILD
 
 #ifdef LOCAL_BUILD
 #	define GEMINI_IDCODE		0x20000913
