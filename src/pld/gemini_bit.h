@@ -18,6 +18,7 @@ enum rs_bop_type {
 	BOP_FCB = 0x00424346,     // "FCB\0" - FPGA Config Block
 	BOP_ICB = 0x00424349,     // "ICB\0" - IO Config Block
 	BOP_PCB = 0x00424350,     // "PCB\0" - Preload Control Block
+	BOP_FPGA = 0x41475046,    // "FPGA"  - Any of FCB, ICB, PCB or all
 	BOP_ACPU = 0x55504341,    // "ACPU"  - ACPU baremetal image
 	BOP_UBOOT = 0x00544255,   // "UBT\0" - U-boot image
 	BOP_LINUX = 0x00584e4c,   // "LNX\0" - Linux image
@@ -59,7 +60,7 @@ int gemini_read_bit_file(gemini_bit_file_t *bit_file, const char *filename);
 void gemini_free_bit_file(gemini_bit_file_t *bit_file);
 uint8_t *gemini_get_first_bop(gemini_bit_file_t *bit_file);
 uint8_t *gemini_get_next_bop(gemini_bit_file_t *bit_file);
-uint64_t gemini_get_total_packages_size(gemini_bit_file_t *bit_file);
+int gemini_get_total_packages_size(gemini_bit_file_t *bit_file, uint32_t block_size, uint64_t *total_size);
 uint64_t gemini_get_bop_size(uint8_t *bop);
 uint32_t gemini_get_bop_id(uint8_t *bop);
 int gemini_is_xcb_bop(uint32_t id);
