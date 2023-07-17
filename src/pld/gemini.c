@@ -15,6 +15,7 @@
 #include "helper/time_support.h"
 
 //#define LOCAL_BUILD
+//#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
 #	define GEMINI_IDCODE			0x20000913
@@ -36,24 +37,23 @@
 #define DM_SBDATA0					0x3c
 #define DDR_INIT					1
 #define DDR_NOT_INIT				0
-#define NUM_OF_DEVICE_TYPE			2
-#define CHIP_ID_GEMINI				0x10475253
-#define CHIP_ID_VIRGO				0x10565253
-#define RAM_SIZE_GEMINI				261120 		// 255kb
-#define RAM_SIZE_VIRGO				32768 		// 32kb
+#define GEMINI_SRAM_SIZE			261120 // 255kb
+#define VIRGO_ILM_SIZE				65536  // 64kb
 
 enum gemini_prg_mode {
 	GEMINI_PRG_MODE_FPGA,
 	GEMINI_PRG_MODE_SPI_FLASH
 };
 
-struct device_t device_table[NUM_OF_DEVICE_TYPE] = {
-#ifdef LOCAL_BUILD
-    { "chernyee", 0x80003ff0, 0x80003028, 0x800030f0, 0x80003ff4, 0x80000000, RAM_SIZE_GEMINI, 0x80000000, 0x80003ffc, 0x80003ff8, { 0x12345678, 0 } },
+struct device_t device_table[] =
+{
+#if defined(LOCAL_BUILD) || defined(PROTOTYPE_BUILD)
+    { "local" , 0x80003ff0, 0x80003028, 0x800030f0, 0x80003ff4, 0x80000000, GEMINI_SRAM_SIZE, 0x80000000, 0x80003ffc, 0x80003ff8, { 0x12345678, 0 } },
+    { "Gemini", 0xf1000000, 0xf1000028, 0x8003DDF4, 0xf10a0000, 0x80020000, 131072          , 0x8003DDF8, 0x8003FDF8, 0x8003FDFC, { 0x10475253, 0 } },
 #else
-    { "Gemini", 0xf1000000, 0xf1000028, 0xf10000f0, 0xf10a0000, 0x80000000, RAM_SIZE_GEMINI, 0x8003DDF8, 0x8003FDF8, 0x8003FDFC, { CHIP_ID_GEMINI, 0 } },
+    { "Gemini", 0xf1000000, 0xf1000028, 0xf10000f0, 0xf10a0000, 0x80000000, GEMINI_SRAM_SIZE, 0x8003DDF8, 0x8003FDF8, 0x8003FDFC, { 0x10475253, 0 } },
+    { "Virgo" , 0xa0110000, 0xa0110028, 0xa01100f0, 0xa0710000, 0xA0200000, VIRGO_ILM_SIZE  , 0xA020DFF8, 0xA020FFFC, 0xA020FFF8, { 0x10565253, 0 } },
 #endif
-    { "Virgo" , 0xa0110000, 0xa0110028, 0xa01100f0, 0xa0710000, 0xA0200000, RAM_SIZE_VIRGO , 0xA020DFF8, 0xA020FFFC, 0xA020FFF8, { CHIP_ID_VIRGO , 0 } },
 };
 
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
@@ -147,7 +147,7 @@ static struct device_t *gemini_detect_device_type(struct target * target)
 	struct device_t *dev = NULL;
 	uint32_t chip_id;
 
-	for (int i = 0; i < NUM_OF_DEVICE_TYPE && dev == NULL; ++i)
+	for (uint32_t i = 0; i < (sizeof(device_table) / sizeof(struct device_t)) && dev == NULL; ++i)
 	{
 		// try to read the chip id from the target
 		if (gemini_read_reg32(target, device_table[i].probe_addr, &chip_id) != ERROR_OK)
