@@ -13,9 +13,31 @@
 #include <target/target_type.h>
 #include <target/riscv/riscv.h>
 
-struct gemini_pld_device {
+#define MAX_NUM_OF_CHIP_ID	5
+
+struct device_t {
+	char *name;
+	intptr_t probe_addr;
+	intptr_t debug_control;
+	intptr_t spare_reg;
+	intptr_t cfg_status;
+	intptr_t fsbl_ubi_addr;
+	uint32_t ram_size;
+	intptr_t cbuffer;
+	intptr_t read_counter;
+	intptr_t writer_counter;
+	uint32_t chip_id[MAX_NUM_OF_CHIP_ID];
+};
+
+struct target_info_t {
 	struct target *target;
 	struct jtag_tap *tap;
+	struct device_t *device;
+};
+
+struct gemini_pld_device {
+	struct target_info_t *target_info;
+	uint32_t count;
 };
 
 struct gemini_stats {
