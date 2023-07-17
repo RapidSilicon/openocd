@@ -430,19 +430,19 @@ static int gemini_load_fsbl(struct target_info_t *target_info, gemini_bit_file_t
 	retval = gemini_write_memory(target_info->target, target_info->device->fsbl_ubi_addr, size, fsbl_size / size, (uint8_t *)bit_file->ubi_header);
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08lx", fsbl_size, target_info->device->fsbl_ubi_addr);
+		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08" PRIxPTR, fsbl_size, target_info->device->fsbl_ubi_addr);
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("[RS] Wrote %d bytes to SRAM at 0x%08lx", fsbl_size, target_info->device->fsbl_ubi_addr);
+	LOG_DEBUG("[RS] Wrote %d bytes to SRAM at 0x%08" PRIxPTR, fsbl_size, target_info->device->fsbl_ubi_addr);
 
 	if (gemini_write_reg32(target_info->target, target_info->device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08lx", GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08lx", GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
+	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
 
 	retval = gemini_poll_command_complete_and_status(target_info, &status);
 	if (retval == ERROR_OK)
@@ -485,7 +485,7 @@ static int gemini_init_ddr(struct target_info_t *target_info)
 
 	if (gemini_write_reg32(target_info->target, target_info->device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08lx", GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
 		return ERROR_FAIL;
 	}
 
@@ -524,13 +524,13 @@ static int gemini_reset_read_write_counters(struct target_info_t *target_info)
 {
 	if (gemini_write_reg32(target_info->target, target_info->device->writer_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset write counter at 0x%08lx", target_info->device->writer_counter);
+		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, target_info->device->writer_counter);
 		return ERROR_FAIL;
 	}
 
 	if (gemini_write_reg32(target_info->target, target_info->device->read_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset read counter at 0x%08lx", target_info->device->read_counter);
+		LOG_ERROR("[RS] Failed to reset read counter at 0x%08" PRIxPTR, target_info->device->read_counter);
 		return ERROR_FAIL;
 	}
 
@@ -568,7 +568,7 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 
 		if (target_read_u32(target_info->target, target_info->device->read_counter, &read_counter) != ERROR_OK)
 		{
-			LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08lx", target_info->device->read_counter);
+			LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08" PRIxPTR, target_info->device->read_counter);
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -595,7 +595,7 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 			{
 				if (target_write_memory(target_info->target, GEMINI_BUFFER_ADDR(target_info->device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), data) != ERROR_OK)
 				{
-					LOG_ERROR("[RS] Failed to write a block to %lx on the device", GEMINI_BUFFER_ADDR(target_info->device->cbuffer, write_counter));
+					LOG_ERROR("[RS] Failed to write a block to 0x%08" PRIxPTR " on the device", GEMINI_BUFFER_ADDR(target_info->device->cbuffer, write_counter));
 					retval = ERROR_FAIL;
 					break;
 				}
@@ -609,13 +609,15 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 
 			if (target_write_u32(target_info->target, target_info->device->writer_counter, write_counter) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to increment write counter at 0x%08lx", target_info->device->writer_counter);
+				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, target_info->device->writer_counter);
 				retval = ERROR_FAIL;
 				break;
 			}
 
-			if (stats->log & 1)
-				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0, stats->data_sent, stats->total_packages_size);
+			if (stats->log & 1) {
+				float progress = ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0;
+				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, stats->data_sent, stats->total_packages_size);
+			}
 
 			timeout_counter = 0;
 		}
@@ -692,7 +694,7 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 			// write task cmd
 			if (gemini_write_reg32(target_info->target, target_info->device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08lx", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, target_info->device->spare_reg);
+				LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, target_info->device->spare_reg);
 				retval = ERROR_FAIL;
 				break;
 			}
@@ -772,7 +774,7 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 	// write task cmd
 	if (gemini_write_reg32(target_info->target, target_info->device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08lx", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH, target_info->device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH, target_info->device->spare_reg);
 		return ERROR_FAIL;
 	}
 
