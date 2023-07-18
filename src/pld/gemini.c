@@ -38,6 +38,7 @@
 #define GEMINI_SRAM_SIZE			261120 // 255kb
 #define VIRGO_ILM_SIZE				65536  // 64kb
 #define MSEC(miliseconds)			(miliseconds * 1000)
+#define STATUS(x)					((x >> 10) & 0x3f)
 
 enum gemini_prg_mode {
 	GEMINI_PRG_MODE_FPGA,
@@ -227,7 +228,7 @@ static int gemini_get_command_status(struct target_info_t * target_info, uint32_
 
 	if (gemini_read_reg32(target_info->target, target_info->device->spare_reg, &spare_reg) == ERROR_OK)
 	{
-		*status = (spare_reg >> 10) & 0x3f;
+		*status = STATUS(spare_reg);
 		return ERROR_OK;
 	}
 
@@ -541,6 +542,7 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 	uint32_t write_counter = 0;
 	uint32_t timeout_counter = 0;
 	uint32_t block_counter = data_size / GEMINI_BLOCK_SIZE;
+	uint32_t spare_reg = 0;
 
 	// 1. halt target
 	// 2. retrieve read counter
@@ -622,10 +624,21 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 			// circular buffer is full
 			stats->cicular_buffer_full_count += 1;
 			++timeout_counter;
+
 			if (timeout_counter >= GEMINI_TIMEOUT_COUNTER)
 			{
-				LOG_ERROR("[RS] Circular buffer timed out.");
-				retval = ERROR_TIMEOUT_REACHED;
+				if (target_read_u32(target_info->target, target_info->device->spare_reg, &spare_reg) == ERROR_OK && STATUS(spare_reg) != 0)
+				{
+					// read counter not advancing due to block processing error at fw
+					LOG_ERROR("[RS] Command error %d.", STATUS(spare_reg));
+					retval = ERROR_FAIL;
+				}
+				else
+				{
+					// read counter not advancing for unknown reason
+					LOG_ERROR("[RS] Circular buffer timed out.");
+					retval = ERROR_TIMEOUT_REACHED;
+				}
 				break;
 			}
 		}
@@ -697,9 +710,8 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 
 			// stream 2k data blocks onto device
 			++stats.package_count;
-			if (gemini_stream_data_blocks(target_info, bop, gemini_get_bop_size(bop), &stats) != ERROR_OK)
+			if ((retval = gemini_stream_data_blocks(target_info, bop, gemini_get_bop_size(bop), &stats)) != ERROR_OK)
 			{
-				retval = ERROR_FAIL;
 				break;
 			}
 
