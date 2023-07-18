@@ -26,12 +26,10 @@
 #define GEMINI_PRODUCT_ID			0x31303050  // <-- need a map for bitstream product to device type
 #define GEMINI_BLOCK_SIZE			2048
 #define GEMINI_NUM_OF_BLOCKS		4
-#define GEMINI_WAIT_TIME_USEC		15000
 #define GEMINI_TIMEOUT_COUNTER		10
 #define GEMINI_BUFFER_ADDR(base, x)	(base + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
 #define GEMINI_ACPU					1
 #define GEMINI_BCPU					0
-#define GEMINI_COMMAND_POLLS		10
 #define DM_SBCS						0x38
 #define DM_SBADDRESS0				0x39
 #define DM_SBDATA0					0x3c
@@ -39,6 +37,7 @@
 #define DDR_NOT_INIT				0
 #define GEMINI_SRAM_SIZE			261120 // 255kb
 #define VIRGO_ILM_SIZE				65536  // 64kb
+#define MSEC(miliseconds)			(miliseconds * 1000)
 
 enum gemini_prg_mode {
 	GEMINI_PRG_MODE_FPGA,
@@ -49,10 +48,10 @@ struct device_t device_table[] =
 {
 #if defined(LOCAL_BUILD) || defined(PROTOTYPE_BUILD)
     { "local" , 0x80003ff0, 0x80003028, 0x800030f0, 0x80003ff4, 0x80000000, GEMINI_SRAM_SIZE, 0x80000000, 0x80003ffc, 0x80003ff8, { 0x12345678, 0 } },
-    { "Gemini", 0xf1000000, 0xf1000028, 0x8003DDF4, 0xf10a0000, 0x80020000, 131072          , 0x8003DDF8, 0x8003FDF8, 0x8003FDFC, { 0x10475253, 0 } },
+    { "gemini", 0xf1000000, 0xf1000028, 0x8003DDF4, 0xf10a0000, 0x80020000, 131072          , 0x8003DDF8, 0x8003FDFC, 0x8003FDF8, { 0x10475253, 0 } },
 #else
-    { "Gemini", 0xf1000000, 0xf1000028, 0xf10000f0, 0xf10a0000, 0x80000000, GEMINI_SRAM_SIZE, 0x8003DDF8, 0x8003FDF8, 0x8003FDFC, { 0x10475253, 0 } },
-    { "Virgo" , 0xa0110000, 0xa0110028, 0xa01100f0, 0xa0710000, 0xA0200000, VIRGO_ILM_SIZE  , 0xA020DFF8, 0xA020FFFC, 0xA020FFF8, { 0x10565253, 0 } },
+    { "Gemini", 0xf1000000, 0xf1000028, 0xf10000f0, 0xf10a0000, 0x80000000, GEMINI_SRAM_SIZE, 0x8003DDF8, 0x8003FDFC, 0x8003FDF8, { 0x10475253, 0 } },
+    { "Virgo" , 0xa0110000, 0xa0110028, 0xa01100f0, 0xa0710000, 0xA0200000, VIRGO_ILM_SIZE  , 0xA040DFF8, 0xA040FFFC, 0xA040FFF8, { 0x10565253, 0 } },
 #endif
 };
 
@@ -345,27 +344,24 @@ static int gemini_switch_to_bcpu(struct target_info_t * target_info)
 	return ERROR_OK;
 }
 
-static int gemini_poll_command_complete_and_status(struct target_info_t * target_info, uint32_t *status)
+static int gemini_poll_command_complete_and_status(struct target_info_t * target_info, uint32_t *status, uint32_t wait_time_us, uint32_t num_polls)
 {
 	int retval = ERROR_OK;
-	uint32_t num_polls = 0;
 
 	while (1)
 	{
-		LOG_DEBUG("[RS] Poll command status #%d...", num_polls);
-
 		retval = gemini_get_command_status(target_info, status);
 		if (retval != ERROR_OK)
 			break;
 		if (*status != GEMINI_PRG_ST_PENDING)
 			break;
-		if (++num_polls >= GEMINI_COMMAND_POLLS)
-		{
+		if (num_polls == 0) {
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
 			retval = ERROR_TIMEOUT_REACHED;
 			break;
 		}
-		usleep(GEMINI_WAIT_TIME_USEC);
+		--num_polls;
+		usleep(wait_time_us);
 	}
 
 	// check the command status
@@ -444,7 +440,7 @@ static int gemini_load_fsbl(struct target_info_t *target_info, gemini_bit_file_t
 
 	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, target_info->device->spare_reg);
 
-	retval = gemini_poll_command_complete_and_status(target_info, &status);
+	retval = gemini_poll_command_complete_and_status(target_info, &status, MSEC(1000), 5);
 	if (retval == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
@@ -489,7 +485,7 @@ static int gemini_init_ddr(struct target_info_t *target_info)
 		return ERROR_FAIL;
 	}
 
-	retval = gemini_poll_command_complete_and_status(target_info, &status);
+	retval = gemini_poll_command_complete_and_status(target_info, &status, MSEC(1000), 5);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
@@ -676,7 +672,7 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 	stats.data_sent = 0;
 	stats.package_count = 0;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = GEMINI_WAIT_TIME_USEC;
+	stats.wait_time_us = MSEC(15);
 	stats.log = progress_log;
 
 	bop = gemini_get_first_bop(bit_file);
@@ -708,7 +704,7 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 			}
 
 			// check final cmd status
-			if ((retval = gemini_poll_command_complete_and_status(target_info, &status)) != ERROR_OK)
+			if ((retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, 20)) != ERROR_OK)
 			{
 				break;
 			}
@@ -764,7 +760,7 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 	stats.data_sent = 0;
 	stats.package_count = 1;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = GEMINI_WAIT_TIME_USEC;
+	stats.wait_time_us = MSEC(15);
 	stats.log = progress_log;
 
 	// reset read/write counters
@@ -786,7 +782,7 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target_info, &status);
+	retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, 20);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
