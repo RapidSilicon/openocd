@@ -49,7 +49,7 @@ struct device_t device_table[] =
 {
 #if defined(LOCAL_BUILD) || defined(PROTOTYPE_BUILD)
     { "local" , 0x80003ff0, 0x80003028, 0x800030f0, 0x80003ff4, 0x80000000, GEMINI_SRAM_SIZE, 0x80000000, 0x80003ffc, 0x80003ff8, { 0x12345678, 0 } },
-    { "gemini", 0xf1000000, 0xf1000028, 0x8003DDF4, 0xf10a0000, 0x80020000, 131072          , 0x8003DDF8, 0x8003FDFC, 0x8003FDF8, { 0x10475253, 0 } },
+    { "gemini", 0xf1000000, 0xf1000028, 0x8003DDF4, 0xf10a0000, 0x80000000, 131072          , 0x8003DDF8, 0x8003FDFC, 0x8003FDF8, { 0x10475253, 0 } },
 #else
     { "Gemini", 0xf1000000, 0xf1000028, 0xf10000f0, 0xf10a0000, 0x80000000, GEMINI_SRAM_SIZE, 0x8003DDF8, 0x8003FDFC, 0x8003FDF8, { 0x10475253, 0 } },
     { "Virgo" , 0xa0110000, 0xa0110028, 0xa01100f0, 0xa0710000, 0xA0200000, VIRGO_ILM_SIZE  , 0xA040DFF8, 0xA040FFFC, 0xA040FFF8, { 0x10565253, 0 } },
@@ -600,6 +600,7 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 				write_counter += 1;
 				block_counter -= 1;
 				stats->data_sent += GEMINI_BLOCK_SIZE;
+				data += GEMINI_BLOCK_SIZE;
 			}
 
 			if (retval != ERROR_OK)
