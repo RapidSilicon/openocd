@@ -26,7 +26,7 @@
 #define GEMINI_PRODUCT_ID			0x31303050  // <-- need a map for bitstream product to device type
 #define GEMINI_BLOCK_SIZE			2048
 #define GEMINI_NUM_OF_BLOCKS		4
-#define GEMINI_TIMEOUT_COUNTER		10
+#define GEMINI_TIMEOUT_COUNTER		2000
 #define GEMINI_BUFFER_ADDR(base, x)	(base + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
 #define GEMINI_ACPU					1
 #define GEMINI_BCPU					0
@@ -717,7 +717,7 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 			}
 
 			// check final cmd status
-			if ((retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, 20)) != ERROR_OK)
+			if ((retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, GEMINI_TIMEOUT_COUNTER)) != ERROR_OK)
 			{
 				break;
 			}
@@ -795,7 +795,7 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, 20);
+	retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, GEMINI_TIMEOUT_COUNTER);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
