@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
+#define LOCAL_BUILD
 //#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
@@ -26,7 +26,8 @@
 #define GEMINI_PRODUCT_ID			0x31303050  // <-- need a map for bitstream product to device type
 #define GEMINI_BLOCK_SIZE			2048
 #define GEMINI_NUM_OF_BLOCKS		4
-#define GEMINI_TIMEOUT_COUNTER		2000
+#define GEMINI_TIMEOUT_COUNTER		1000
+#define GEMINI_WAIT_TIME_US			30000
 #define GEMINI_BUFFER_ADDR(base, x)	(base + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
 #define GEMINI_ACPU					1
 #define GEMINI_BCPU					0
@@ -37,7 +38,7 @@
 #define DDR_NOT_INIT				0
 #define GEMINI_SRAM_SIZE			261120 // 255kb
 #define VIRGO_ILM_SIZE				65536  // 64kb
-#define MSEC(miliseconds)			(miliseconds * 1000)
+#define MSEC(miliseconds)			(miliseconds * 1000) // to microseconds
 #define STATUS(x)					((x >> 10) & 0x3f)
 
 enum gemini_prg_mode {
@@ -626,7 +627,7 @@ static int gemini_stream_data_blocks(struct target_info_t *target_info, uint8_t 
 			stats->cicular_buffer_full_count += 1;
 			++timeout_counter;
 
-			if (timeout_counter >= GEMINI_TIMEOUT_COUNTER)
+			if (timeout_counter >= stats->timeout_counter)
 			{
 				if (target_read_u32(target_info->target, target_info->device->spare_reg, &spare_reg) == ERROR_OK && STATUS(spare_reg) != 0)
 				{
@@ -686,7 +687,8 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 	stats.data_sent = 0;
 	stats.package_count = 0;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = MSEC(15);
+	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	stats.wait_time_us = GEMINI_WAIT_TIME_US;
 	stats.log = progress_log;
 
 	bop = gemini_get_first_bop(bit_file);
@@ -717,7 +719,7 @@ static int gemini_program_bitstream(struct target_info_t *target_info, gemini_bi
 			}
 
 			// check final cmd status
-			if ((retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, GEMINI_TIMEOUT_COUNTER)) != ERROR_OK)
+			if ((retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, stats.timeout_counter)) != ERROR_OK)
 			{
 				break;
 			}
@@ -773,7 +775,8 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 	stats.data_sent = 0;
 	stats.package_count = 1;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = MSEC(15);
+	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	stats.wait_time_us = GEMINI_WAIT_TIME_US;
 	stats.log = progress_log;
 
 	// reset read/write counters
@@ -795,7 +798,7 @@ static int gemini_program_flash(struct target_info_t *target_info, gemini_bit_fi
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, GEMINI_TIMEOUT_COUNTER);
+	retval = gemini_poll_command_complete_and_status(target_info, &status, stats.wait_time_us, stats.timeout_counter);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)

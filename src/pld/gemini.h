@@ -46,6 +46,7 @@ struct gemini_stats {
 	uint32_t cicular_buffer_full_count;
 	uint8_t package_count;
 	uint8_t log;
+	uint32_t timeout_counter;
 	uint32_t wait_time_us;
 	uint64_t total_overall_us;
 	uint64_t total_us;
