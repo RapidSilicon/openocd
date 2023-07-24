@@ -17,7 +17,6 @@
 
 struct device_t {
 	char *name;
-	intptr_t scu;
 	intptr_t debug_control;
 	intptr_t spare_reg;
 	intptr_t cfg_status;
@@ -26,7 +25,6 @@ struct device_t {
 	intptr_t cbuffer;
 	intptr_t read_counter;
 	intptr_t writer_counter;
-	uint32_t chip_id[MAX_NUM_OF_CHIP_ID];
 };
 
 struct target_info_t {
