@@ -654,20 +654,18 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 			stats->cicular_buffer_full_count += 1;
 			++timeout_counter;
 
+			// check cmd status
+			if (target_read_u32(target, device->spare_reg, &spare_reg) == ERROR_OK && STATUS(spare_reg) != 0)
+			{
+				LOG_ERROR("[RS] Command error %d.", STATUS(spare_reg));
+				retval = ERROR_FAIL;
+				break;
+			}
+
 			if (timeout_counter >= stats->timeout_counter)
 			{
-				if (target_read_u32(target, device->spare_reg, &spare_reg) == ERROR_OK && STATUS(spare_reg) != 0)
-				{
-					// read counter not advancing due to block processing error at fw
-					LOG_ERROR("[RS] Command error %d.", STATUS(spare_reg));
-					retval = ERROR_FAIL;
-				}
-				else
-				{
-					// read counter not advancing for unknown reason
-					LOG_ERROR("[RS] Circular buffer timed out.");
-					retval = ERROR_TIMEOUT_REACHED;
-				}
+				LOG_ERROR("[RS] Circular buffer timed out.");
+				retval = ERROR_TIMEOUT_REACHED;
 				break;
 			}
 		}
