@@ -435,7 +435,7 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 
 	if (fsbl_size == 0)
 	{
-		LOG_ERROR("[RS] FSBL BOP not exist in the bitstream");
+		LOG_ERROR("[RS] FSBL package not found in the bitstream");
 		return ERROR_FAIL;
 	}
 
