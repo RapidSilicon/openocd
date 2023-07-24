@@ -17,7 +17,7 @@
 
 struct device_t {
 	char *name;
-	intptr_t probe_addr;
+	intptr_t scu;
 	intptr_t debug_control;
 	intptr_t spare_reg;
 	intptr_t cfg_status;
@@ -32,7 +32,6 @@ struct device_t {
 struct target_info_t {
 	struct target *target;
 	struct jtag_tap *tap;
-	struct device_t *device;
 };
 
 struct gemini_pld_device {
