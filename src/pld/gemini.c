@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-#define LOCAL_BUILD
+//#define LOCAL_BUILD
 //#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
@@ -49,21 +49,18 @@ struct device_t device_table[] =
 #if defined(LOCAL_BUILD)
     {
 		.name           = "gemini",
-		.scu            = 0x80003ff0,
 		.debug_control  = 0x80003028,
 		.spare_reg      = 0x800030f0,
 		.cfg_status     = 0x80003ff4,
 		.fsbl_ubi_addr  = 0x80000000,
-		.ram_size       = 131072, /* 128kb SRAM */
+		.ram_size       = 261120, /* 255kb SRAM */
 		.cbuffer        = 0x80000000,
 		.read_counter   = 0x80003ffc,
 		.writer_counter = 0x80003ff8,
-		.chip_id        = { 0x12345678, }
 	},
 #elif defined(PROTOTYPE_BUILD)
     {
 		.name           = "gemini",
-		.scu            = 0xf1000000,
 		.debug_control  = 0xf1000028,
 		.spare_reg      = 0x8003DDF4,
 		.cfg_status     = 0xf10a0000,
@@ -72,12 +69,10 @@ struct device_t device_table[] =
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
 		.writer_counter = 0x8003FDF8,
-		.chip_id        = { 0x10475253, }
 	},
 #else
     {
 		.name           = "gemini",
-		.scu            = 0xf1000000,
 		.debug_control  = 0xf1000028,
 		.spare_reg      = 0xf10000f0,
 		.cfg_status     = 0xf10a0000,
@@ -86,11 +81,9 @@ struct device_t device_table[] =
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
 		.writer_counter = 0x8003FDF8,
-		.chip_id        = { 0x10475253, }
 	},
     {
 		.name           = "virgo",
-		.scu            = 0xa0110000,
 		.debug_control  = 0xa0110028,
 		.spare_reg      = 0xa01100f0,
 		.cfg_status     = 0xa0710000,
@@ -99,7 +92,6 @@ struct device_t device_table[] =
 		.cbuffer        = 0xA040DFF8,
 		.read_counter   = 0xA040FFFC,
 		.writer_counter = 0xA040FFF8,
-		.chip_id        = { 0x10565253, }
 	},
 #endif
 };
@@ -291,7 +283,7 @@ static int gemini_check_target_device(struct target *target, gemini_bit_file_t *
 
 	if (bit_file->ubi_header->product_id != GEMINI_PRODUCT_ID)
 	{
-		LOG_ERROR("[RS] Invalid gemini product id found in bitstream file 0x%x", bit_file->ubi_header->product_id);
+		LOG_ERROR("[RS] Invalid Gemini Product ID in the bitstream file");
 		return ERROR_FAIL;
 	}
 
