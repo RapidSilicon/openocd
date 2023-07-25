@@ -13,8 +13,6 @@
 #include <target/target_type.h>
 #include <target/riscv/riscv.h>
 
-#define MAX_NUM_OF_CHIP_ID	5
-
 struct device_t {
 	char *name;
 	intptr_t debug_control;
