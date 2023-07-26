@@ -15,45 +15,85 @@
 #include "helper/time_support.h"
 
 //#define LOCAL_BUILD
+//#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
-#	define GEMINI_IDCODE		0x20000913
-#	define GEMINI_DEBUG_CONTROL	0x80003028
-#	define GEMINI_SPARE_REG		0x800030f0
-#	define GEMINI_CFG_STATUS	0x80003ff4
-#	define GEMINI_BUFFER_BASE	0x80000000
-#	define GEMINI_WRITE_COUNTER	0x80003ff8
-#	define GEMINI_READ_COUNTER	0x80003ffc
+#	define GEMINI_IDCODE			0x20000913
 #else
-#	define GEMINI_IDCODE		0x1000563d
-#	define GEMINI_DEBUG_CONTROL	0xf1000028
-#	define GEMINI_SPARE_REG		0xf10000f0
-#	define GEMINI_CFG_STATUS	0xf10a0000
-#	define GEMINI_BUFFER_BASE	0x8001DC00
-#	define GEMINI_WRITE_COUNTER	0x8001FC00
-#	define GEMINI_READ_COUNTER	0x8001FC04
+#	define GEMINI_IDCODE			0x1000563d
 #endif
 
-#define GEMINI_PRODUCT_ID		0x31303050
-#define GEMINI_SRAM_SIZE		261120 		// 255kb
-#define GEMINI_SRAM_ADDRESS		0x80000000
-#define GEMINI_BLOCK_SIZE		2048
-#define GEMINI_NUM_OF_BLOCKS	4
-#define GEMINI_WAIT_TIME_USEC	15000
-#define GEMINI_TIMEOUT_COUNTER	10
-#define GEMINI_BUFFER_ADDR(x)	(GEMINI_BUFFER_BASE + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
-#define GEMINI_ACPU				1
-#define GEMINI_BCPU				0
-#define GEMINI_COMMAND_POLLS	10
-#define DM_SBCS					0x38
-#define DM_SBADDRESS0			0x39
-#define DM_SBDATA0				0x3c
-#define DDR_INIT				1
-#define DDR_NOT_INIT			0
+#define GEMINI_PRODUCT_ID			0x31303050
+#define GEMINI_BLOCK_SIZE			2048
+#define GEMINI_NUM_OF_BLOCKS		4
+#define GEMINI_TIMEOUT_COUNTER		500
+#define GEMINI_WAIT_TIME_US			30000
+#define GEMINI_BUFFER_ADDR(base, x)	(base + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
+#define GEMINI_ACPU					1
+#define GEMINI_BCPU					0
+#define DM_SBCS						0x38
+#define DM_SBADDRESS0				0x39
+#define DM_SBDATA0					0x3c
+#define DDR_INIT					1
+#define DDR_NOT_INIT				0
+#define MSEC(miliseconds)			(miliseconds * 1000) // to microseconds
+#define STATUS(x)					((x >> 10) & 0x3f)
 
 enum gemini_prg_mode {
 	GEMINI_PRG_MODE_FPGA,
 	GEMINI_PRG_MODE_SPI_FLASH
+};
+
+struct device_t device_table[] =
+{
+#if defined(LOCAL_BUILD)
+    {
+		.name           = "gemini",
+		.debug_control  = 0x80003028,
+		.spare_reg      = 0x800030f0,
+		.cfg_status     = 0x80003ff4,
+		.fsbl_ubi_addr  = 0x80000000,
+		.ram_size       = 261120, /* 255kb SRAM */
+		.cbuffer        = 0x80000000,
+		.read_counter   = 0x80003ffc,
+		.writer_counter = 0x80003ff8,
+	},
+#elif defined(PROTOTYPE_BUILD)
+    {
+		.name           = "gemini",
+		.debug_control  = 0xf1000028,
+		.spare_reg      = 0x8003DDF4,
+		.cfg_status     = 0xf10a0000,
+		.fsbl_ubi_addr  = 0x80000000,
+		.ram_size       = 131072, /* 128kb SRAM */
+		.cbuffer        = 0x8003DDF8,
+		.read_counter   = 0x8003FDFC,
+		.writer_counter = 0x8003FDF8,
+	},
+#else
+    {
+		.name           = "gemini",
+		.debug_control  = 0xf1000028,
+		.spare_reg      = 0xf10000f0,
+		.cfg_status     = 0xf10a0000,
+		.fsbl_ubi_addr  = 0x80000000,
+		.ram_size       = 261120, /* 255k SRAM */
+		.cbuffer        = 0x8003DDF8,
+		.read_counter   = 0x8003FDFC,
+		.writer_counter = 0x8003FDF8,
+	},
+    {
+		.name           = "virgo",
+		.debug_control  = 0xa0110028,
+		.spare_reg      = 0xa01100f0,
+		.cfg_status     = 0xa0710000,
+		.fsbl_ubi_addr  = 0xA0200000,
+		.ram_size       = 65536, /* 64kb ILM */
+		.cbuffer        = 0xA040DFF8,
+		.read_counter   = 0xA040FFFC,
+		.writer_counter = 0xA040FFF8,
+	},
+#endif
 };
 
 static int gemini_sysbus_write_reg32(struct target * target, target_addr_t address, uint32_t value)
@@ -142,6 +182,19 @@ static int gemini_read_reg32(struct target * target, target_addr_t address, uint
 	return retval;
 }
 
+static int gemini_get_device_type(char *typename, struct device_t **device)
+{
+	for (uint32_t i = 0; i < (sizeof(device_table) / sizeof(struct device_t)); ++i)
+	{
+		if (!strcmp(typename, device_table[i].name))
+		{
+			*device = &device_table[i];
+			return ERROR_OK;
+		}
+	}
+	return ERROR_FAIL;
+}
+
 static int gemini_write_memory(struct target * target, target_addr_t address, uint32_t size, uint32_t count, const uint8_t *buffer)
 {
 	int retval = ERROR_OK;
@@ -164,11 +217,11 @@ static int gemini_write_memory(struct target * target, target_addr_t address, ui
 	return retval;
 }
 
-static int gemini_get_cpu_type(struct target * target, uint32_t *cpu_type)
+static int gemini_get_cpu_type(struct target *target, struct device_t *device, uint32_t *cpu_type)
 {
 	uint32_t debug_control;
 
-	if (gemini_read_reg32(target, GEMINI_DEBUG_CONTROL, &debug_control) == ERROR_OK)
+	if (gemini_read_reg32(target, device->debug_control, &debug_control) == ERROR_OK)
 	{
 		*cpu_type = debug_control & 0x1 ? GEMINI_ACPU : GEMINI_BCPU;
 		return ERROR_OK;
@@ -177,11 +230,11 @@ static int gemini_get_cpu_type(struct target * target, uint32_t *cpu_type)
 	return ERROR_FAIL;
 }
 
-static int gemini_get_firmware_type(struct target * target, uint32_t *fw_type)
+static int gemini_get_firmware_type(struct target * target, struct device_t *device, uint32_t *fw_type)
 {
 	uint32_t spare_reg;
 
-	if (gemini_read_reg32(target, GEMINI_SPARE_REG, &spare_reg) == ERROR_OK)
+	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
 	{
 		spare_reg >>= 29;
 		if (spare_reg == GEMINI_PRG_FW_TYPE_BOOTROM || spare_reg == GEMINI_PRG_FW_TYPE_CFG_FSBL)
@@ -194,24 +247,24 @@ static int gemini_get_firmware_type(struct target * target, uint32_t *fw_type)
 	return ERROR_FAIL;
 }
 
-static int gemini_get_command_status(struct target * target, uint32_t *status)
+static int gemini_get_command_status(struct target *target, struct device_t *device, uint32_t *status)
 {
 	uint32_t spare_reg;
 
-	if (gemini_read_reg32(target, GEMINI_SPARE_REG, &spare_reg) == ERROR_OK)
+	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
 	{
-		*status = (spare_reg >> 10) & 0x3f;
+		*status = STATUS(spare_reg);
 		return ERROR_OK;
 	}
 
 	return ERROR_FAIL;
 }
 
-static int gemini_get_ddr_status(struct target * target, uint32_t *status)
+static int gemini_get_ddr_status(struct target *target, struct device_t *device, uint32_t *status)
 {
 	uint32_t spare_reg;
 
-	if (gemini_read_reg32(target, GEMINI_SPARE_REG, &spare_reg) == ERROR_OK)
+	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
 	{
 		*status = (spare_reg & (1u << 16)) ? DDR_INIT : DDR_NOT_INIT;
 		return ERROR_OK;
@@ -220,28 +273,28 @@ static int gemini_get_ddr_status(struct target * target, uint32_t *status)
 	return ERROR_FAIL;
 }
 
-static int gemini_check_target_device(struct gemini_pld_device *gemini_info, gemini_bit_file_t *bit_file)
+static int gemini_check_target_device(struct target *target, gemini_bit_file_t *bit_file)
 {
-	if (gemini_info->tap->idcode != GEMINI_IDCODE)
+	if (target->tap->idcode != GEMINI_IDCODE)
 	{
-		LOG_ERROR("[RS] Not gemini device IDCODE 0x%08x", gemini_info->tap->idcode);
+		LOG_ERROR("[RS] Unknown JTAG ID 0x%08x", target->tap->idcode);
 		return ERROR_FAIL;
 	}
 
 	if (bit_file->ubi_header->product_id != GEMINI_PRODUCT_ID)
 	{
-		LOG_ERROR("[RS] Invalid gemini product id found in bitstream file 0x%x", bit_file->ubi_header->product_id);
+		LOG_ERROR("[RS] Invalid Gemini Product ID in the bitstream file");
 		return ERROR_FAIL;
 	}
 
 	return ERROR_OK;
 }
 
-static int gemini_get_config_status(struct target * target, uint32_t *cfg_done, uint32_t *cfg_error)
+static int gemini_get_config_status(struct target *target, struct device_t *device, uint32_t *cfg_done, uint32_t *cfg_error)
 {
-	uint32_t cfg_status;
+	uint32_t cfg_status = 0;
 
-	if (gemini_read_reg32(target, GEMINI_CFG_STATUS, &cfg_status) != ERROR_OK)
+	if (gemini_read_reg32(target, device->cfg_status, &cfg_status) != ERROR_OK)
 		return ERROR_FAIL;
 
 	*cfg_done = (cfg_status >> 7) & 0x1;
@@ -271,11 +324,11 @@ static int gemini_reset_bcpu(struct target * target)
 	return ERROR_OK;
 }
 
-static int gemini_switch_to_bcpu(struct target * target)
+static int gemini_switch_to_bcpu(struct target *target, struct device_t *device)
 {
 	uint32_t cpu_type;
 
-	if (gemini_get_cpu_type(target, &cpu_type) != ERROR_OK)
+	if (gemini_get_cpu_type(target, device, &cpu_type) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to get connected cpu type");
 		return ERROR_FAIL;
@@ -289,7 +342,7 @@ static int gemini_switch_to_bcpu(struct target * target)
 
 	LOG_INFO("[RS] Perform switching from ACPU to BCPU...");
 
-	if (gemini_sysbus_write_reg32(target, GEMINI_DEBUG_CONTROL, 0) != ERROR_OK)
+	if (gemini_sysbus_write_reg32(target, device->debug_control, 0) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to write debug_control register");
 		return ERROR_FAIL;
@@ -305,7 +358,7 @@ static int gemini_switch_to_bcpu(struct target * target)
 		return ERROR_FAIL;
 	}
 
-	if (gemini_get_cpu_type(target, &cpu_type) != ERROR_OK || cpu_type == GEMINI_ACPU)
+	if (gemini_get_cpu_type(target, device, &cpu_type) != ERROR_OK || cpu_type == GEMINI_ACPU)
 	{
 		LOG_INFO("[RS] Failed to switch to BCPU");
 		return ERROR_FAIL;
@@ -316,27 +369,24 @@ static int gemini_switch_to_bcpu(struct target * target)
 	return ERROR_OK;
 }
 
-static int gemini_poll_command_complete_and_status(struct target * target, uint32_t *status)
+static int gemini_poll_command_complete_and_status(struct target *target, struct device_t *device, uint32_t *status, uint32_t wait_time_us, uint32_t num_polls)
 {
 	int retval = ERROR_OK;
-	uint32_t num_polls = 0;
 
 	while (1)
 	{
-		LOG_DEBUG("[RS] Poll command status #%d...", num_polls);
-
-		retval = gemini_get_command_status(target, status);
+		retval = gemini_get_command_status(target, device, status);
 		if (retval != ERROR_OK)
 			break;
 		if (*status != GEMINI_PRG_ST_PENDING)
 			break;
-		if (++num_polls >= GEMINI_COMMAND_POLLS)
-		{
+		if (num_polls == 0) {
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
 			retval = ERROR_TIMEOUT_REACHED;
 			break;
 		}
-		usleep(GEMINI_WAIT_TIME_USEC);
+		--num_polls;
+		usleep(wait_time_us);
 	}
 
 	// check the command status
@@ -348,12 +398,12 @@ static int gemini_poll_command_complete_and_status(struct target * target, uint3
 		}
 	}
 	// clear command and status field
-	gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_IDLE);
+	gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_IDLE);
 
 	return retval;
 }
 
-static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
+static int gemini_load_fsbl(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file)
 {
 	int retval = ERROR_OK;
 	uint32_t fsbl_size = bit_file->ubi_header->fsbl_size;
@@ -361,7 +411,7 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	uint32_t status;
 	uint32_t fw_type;
 
-	if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK)
+	if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to determine the firmware type");
 		return ERROR_FAIL;
@@ -377,13 +427,13 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 
 	if (fsbl_size == 0)
 	{
-		LOG_ERROR("[RS] FSBL BOP not exist in the bitstream");
+		LOG_ERROR("[RS] FSBL package not found in the bitstream");
 		return ERROR_FAIL;
 	}
 
-	if (fsbl_size > GEMINI_SRAM_SIZE)
+	if (fsbl_size > device->ram_size)
 	{
-		LOG_ERROR("[RS] FSBL bitstream size (%d bytes) is larger than available SRAM (%d bytes)", fsbl_size, GEMINI_SRAM_SIZE);
+		LOG_ERROR("[RS] FSBL package (%d bytes) is larger than the available SRAM size (%d bytes)", fsbl_size, device->ram_size);
 		return ERROR_FAIL;
 	}
 
@@ -398,28 +448,24 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 	else if ((fsbl_size % 2) == 0)
 		size = 2;
 
-	retval = gemini_write_memory(target, GEMINI_SRAM_ADDRESS, size, fsbl_size / size, (uint8_t *)bit_file->ubi_header);
+	retval = gemini_write_memory(target, device->fsbl_ubi_addr, size, fsbl_size / size, (uint8_t *)bit_file->ubi_header);
 	if (retval != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
+		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08" PRIxPTR, fsbl_size, device->fsbl_ubi_addr);
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("[RS] Wrote %d bytes to SRAM at 0x%08x", fsbl_size, GEMINI_SRAM_ADDRESS);
-
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("[RS] Wrote command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
-
-	retval = gemini_poll_command_complete_and_status(target, &status);
+	retval = gemini_poll_command_complete_and_status(target, device, &status, MSEC(1000), 5);
 	if (retval == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
-		if (gemini_get_firmware_type(target, &fw_type) != ERROR_OK || fw_type != GEMINI_PRG_FW_TYPE_CFG_FSBL)
+		if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK || fw_type != GEMINI_PRG_FW_TYPE_CFG_FSBL)
 			retval = ERROR_FAIL;
 	}
 
@@ -430,17 +476,17 @@ static int gemini_load_fsbl(struct target *target, gemini_bit_file_t *bit_file)
 		LOG_ERROR("[RS] Failed to load FSBL firmware");
 	}
 	else
-		LOG_INFO("[RS] Loaded FSBL firmware of size %d bytes successfully.", fsbl_size);
+		LOG_INFO("[RS] Boot up FSBL firmware of size %d bytes successfully.", fsbl_size);
 
 	return retval;
 }
 
-static int gemini_init_ddr(struct target *target)
+static int gemini_init_ddr(struct target *target, struct device_t *device)
 {
 	int retval = ERROR_OK;
 	uint32_t status;
 
-	if (gemini_get_ddr_status(target, &status) != ERROR_OK)
+	if (gemini_get_ddr_status(target, device, &status) != ERROR_OK)
 	{
 		LOG_ERROR("[RS] Failed to determine the DDR memory status");
 		return ERROR_FAIL;
@@ -454,13 +500,13 @@ static int gemini_init_ddr(struct target *target)
 
 	LOG_INFO("[RS] Initializing DDR memory...");
 
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_BBF_FDI, GEMINI_SPARE_REG);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
-	retval = gemini_poll_command_complete_and_status(target, &status);
+	retval = gemini_poll_command_complete_and_status(target, device, &status, MSEC(1000), 5);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
@@ -491,24 +537,24 @@ static void gemini_print_stats(struct gemini_stats *stats)
 	LOG_INFO("[RS]   10. transfer rate              : %.5f kbps", stats->data_sent / (1024.0 * (stats->total_overall_us / 1000000.0)));
 }
 
-static int gemini_reset_read_write_counters(struct target *target)
+static int gemini_reset_read_write_counters(struct target *target, struct device_t *device)
 {
-	if (gemini_write_reg32(target, GEMINI_WRITE_COUNTER, 32, 0, 0) != ERROR_OK)
+	if (gemini_write_reg32(target, device->writer_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset write counter at 0x%08x", GEMINI_WRITE_COUNTER);
+		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->writer_counter);
 		return ERROR_FAIL;
 	}
 
-	if (gemini_write_reg32(target, GEMINI_READ_COUNTER, 32, 0, 0) != ERROR_OK)
+	if (gemini_write_reg32(target, device->read_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset read counter at 0x%08x", GEMINI_READ_COUNTER);
+		LOG_ERROR("[RS] Failed to reset read counter at 0x%08" PRIxPTR, device->read_counter);
 		return ERROR_FAIL;
 	}
 
 	return ERROR_OK;
 }
 
-static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint64_t data_size, struct gemini_stats *stats)
+static int gemini_stream_data_blocks(struct target *target, struct device_t *device, uint8_t *data, uint64_t data_size, struct gemini_stats *stats)
 {
 	int retval = ERROR_OK;
 	struct duration block_duration, bop_duration;
@@ -516,6 +562,7 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 	uint32_t write_counter = 0;
 	uint32_t timeout_counter = 0;
 	uint32_t block_counter = data_size / GEMINI_BLOCK_SIZE;
+	uint32_t spare_reg = 0;
 
 	// 1. halt target
 	// 2. retrieve read counter
@@ -537,9 +584,9 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 			break;
 		}
 
-		if (target_read_u32(target, GEMINI_READ_COUNTER, &read_counter) != ERROR_OK)
+		if (target_read_u32(target, device->read_counter, &read_counter) != ERROR_OK)
 		{
-			LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08x", GEMINI_READ_COUNTER);
+			LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08" PRIxPTR, device->read_counter);
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -564,29 +611,32 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 
 			for (uint32_t i = 0, num = num_blocks < block_counter ? num_blocks : block_counter; i < num; ++i)
 			{
-				if (target_write_memory(target, GEMINI_BUFFER_ADDR(write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), data) != ERROR_OK)
+				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), data) != ERROR_OK)
 				{
-					LOG_ERROR("[RS] Failed to write a block to %x on the device", GEMINI_BUFFER_ADDR(write_counter));
+					LOG_ERROR("[RS] Failed to write a block to 0x%08" PRIxPTR " on the device", GEMINI_BUFFER_ADDR(device->cbuffer, write_counter));
 					retval = ERROR_FAIL;
 					break;
 				}
 				write_counter += 1;
 				block_counter -= 1;
 				stats->data_sent += GEMINI_BLOCK_SIZE;
+				data += GEMINI_BLOCK_SIZE;
 			}
 
 			if (retval != ERROR_OK)
 				break;
 
-			if (target_write_u32(target, GEMINI_WRITE_COUNTER, write_counter) != ERROR_OK)
+			if (target_write_u32(target, device->writer_counter, write_counter) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to increment write counter at 0x%08x", GEMINI_WRITE_COUNTER);
+				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->writer_counter);
 				retval = ERROR_FAIL;
 				break;
 			}
 
-			if (stats->log & 1)
-				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0, stats->data_sent, stats->total_packages_size);
+			if (stats->log & 1) {
+				float progress = ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0;
+				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, stats->data_sent, stats->total_packages_size);
+			}
 
 			timeout_counter = 0;
 		}
@@ -595,7 +645,16 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 			// circular buffer is full
 			stats->cicular_buffer_full_count += 1;
 			++timeout_counter;
-			if (timeout_counter >= GEMINI_TIMEOUT_COUNTER)
+
+			// check cmd status
+			if (target_read_u32(target, device->spare_reg, &spare_reg) == ERROR_OK && STATUS(spare_reg) != 0)
+			{
+				LOG_ERROR("[RS] Command error %d.", STATUS(spare_reg));
+				retval = ERROR_FAIL;
+				break;
+			}
+
+			if (timeout_counter >= stats->timeout_counter)
 			{
 				LOG_ERROR("[RS] Circular buffer timed out.");
 				retval = ERROR_TIMEOUT_REACHED;
@@ -625,7 +684,7 @@ static int gemini_stream_data_blocks(struct target *target, uint8_t *data, uint6
 	return retval;
 }
 
-static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bit_file, unsigned int progress_log)
+static int gemini_program_bitstream(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int progress_log)
 {
 	int retval = ERROR_OK;
 	uint32_t cfg_done;
@@ -636,11 +695,23 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 
 	LOG_INFO("[RS] Configuring FPGA fabric...");
 
-	stats.total_packages_size = gemini_get_total_packages_size(bit_file);
+	if (gemini_get_total_packages_size(bit_file, GEMINI_BLOCK_SIZE, &stats.total_packages_size) != 0)
+	{
+		LOG_ERROR("[RS] Bitstream BOP size is not multiple of %d bytes", GEMINI_BLOCK_SIZE);
+		return ERROR_FAIL;
+	}
+
+	if (stats.total_packages_size == 0)
+	{
+		LOG_ERROR("[RS] Bitstream doens't contain any FPGA configuration BOP");
+		return ERROR_FAIL;
+	}
+
 	stats.data_sent = 0;
 	stats.package_count = 0;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = GEMINI_WAIT_TIME_USEC;
+	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	stats.wait_time_us = GEMINI_WAIT_TIME_US;
 	stats.log = progress_log;
 
 	bop = gemini_get_first_bop(bit_file);
@@ -649,30 +720,29 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 		if (gemini_is_xcb_bop(gemini_get_bop_id(bop)) == true)
 		{
 			// reset read/write counters
-			if (gemini_reset_read_write_counters(target) != ERROR_OK)
+			if (gemini_reset_read_write_counters(target, device) != ERROR_OK)
 			{
 				retval = ERROR_FAIL;
 				break;
 			}
 
 			// write task cmd
-			if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
+			if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, GEMINI_SPARE_REG);
+				LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, device->spare_reg);
 				retval = ERROR_FAIL;
 				break;
 			}
 
 			// stream 2k data blocks onto device
 			++stats.package_count;
-			if (gemini_stream_data_blocks(target, bop, gemini_get_bop_size(bop), &stats) != ERROR_OK)
+			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), &stats)) != ERROR_OK)
 			{
-				retval = ERROR_FAIL;
 				break;
 			}
 
 			// check final cmd status
-			if ((retval = gemini_poll_command_complete_and_status(target, &status)) != ERROR_OK)
+			if ((retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter)) != ERROR_OK)
 			{
 				break;
 			}
@@ -693,7 +763,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	else
 	{
 		// check configuration done and error status
-		retval = gemini_get_config_status(target, &cfg_done, &cfg_error);
+		retval = gemini_get_config_status(target, device, &cfg_done, &cfg_error);
 		if (retval == ERROR_OK)
 		{
 			if (cfg_done == 1 && cfg_error == 0)
@@ -709,7 +779,7 @@ static int gemini_program_bitstream(struct target *target, gemini_bit_file_t *bi
 	return retval;
 }
 
-static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_file, unsigned int progress_log)
+static int gemini_program_flash(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int progress_log)
 {
 	int retval = ERROR_OK;
 	uint32_t status;
@@ -720,37 +790,38 @@ static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_fi
 
 	if ((filesize % GEMINI_BLOCK_SIZE) != 0)
 	{
-		LOG_WARNING("[RS] Bitstream file size %" PRIu64 " is not multiple of 2k blocks", filesize);
-		filesize += (GEMINI_BLOCK_SIZE - (filesize % GEMINI_BLOCK_SIZE));
+		LOG_ERROR("[RS] Bitstream file size %" PRIu64 " is not multiple of %d bytes", filesize, GEMINI_BLOCK_SIZE);
+		return ERROR_FAIL;
 	}
 
 	stats.total_packages_size = filesize;
 	stats.data_sent = 0;
 	stats.package_count = 1;
 	stats.cicular_buffer_full_count = 0;
-	stats.wait_time_us = GEMINI_WAIT_TIME_USEC;
+	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	stats.wait_time_us = GEMINI_WAIT_TIME_US;
 	stats.log = progress_log;
 
 	// reset read/write counters
-	if (gemini_reset_read_write_counters(target) != ERROR_OK)
+	if (gemini_reset_read_write_counters(target, device) != ERROR_OK)
 		return ERROR_FAIL;
 
 	// write task cmd
-	if (gemini_write_reg32(target, GEMINI_SPARE_REG, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH) != ERROR_OK)
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08x", GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH, GEMINI_SPARE_REG);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
 	// stream 2k data block to device
-	if (gemini_stream_data_blocks(target, (uint8_t *)bit_file->ubi_header, filesize, &stats) != ERROR_OK)
+	if (gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats) != ERROR_OK)
 		return ERROR_FAIL;
 
 	if (stats.log & 2)
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target, &status);
+	retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
@@ -765,33 +836,32 @@ static int gemini_program_flash(struct target *target, gemini_bit_file_t *bit_fi
 	return retval;
 }
 
-static int gemini_program_device(struct pld_device *pld_device, const char *filename, enum gemini_prg_mode mode, unsigned int progress_log)
+static int gemini_program_device(struct target *target, struct device_t *device, const char *filename, enum gemini_prg_mode mode, unsigned int progress_log)
 {
-	struct gemini_pld_device *gemini_info = pld_device->driver_priv;
 	gemini_bit_file_t bit_file;
 	int retval = ERROR_PLD_FILE_LOAD_FAILED;
 
 	if (gemini_read_bit_file(&bit_file, filename) != ERROR_OK)
 		return ERROR_PLD_FILE_LOAD_FAILED;
 
-	if (gemini_check_target_device(gemini_info, &bit_file) != ERROR_OK)
+	if (gemini_check_target_device(target, &bit_file) != ERROR_OK)
 		goto err;
 
-	if (gemini_switch_to_bcpu(gemini_info->target) != ERROR_OK)
+	if (gemini_switch_to_bcpu(target, device) != ERROR_OK)
 		goto err;
 
-	if (gemini_load_fsbl(gemini_info->target, &bit_file) != ERROR_OK)
+	if (gemini_load_fsbl(target, device, &bit_file) != ERROR_OK)
 		goto err;
 
-	if (gemini_init_ddr(gemini_info->target) != ERROR_OK)
+	if (gemini_init_ddr(target, device) != ERROR_OK)
 		goto err;
 
 	if (mode == GEMINI_PRG_MODE_FPGA)
-		if (gemini_program_bitstream(gemini_info->target, &bit_file, progress_log) != ERROR_OK)
+		if (gemini_program_bitstream(target, device, &bit_file, progress_log) != ERROR_OK)
 			goto err;
 
 	if (mode == GEMINI_PRG_MODE_SPI_FLASH)
-		if (gemini_program_flash(gemini_info->target, &bit_file, progress_log) != ERROR_OK)
+		if (gemini_program_flash(target, device, &bit_file, progress_log) != ERROR_OK)
 			goto err;
 
 	// everything is completed successfully
@@ -803,43 +873,93 @@ err:
 
 static int gemini_load(struct pld_device *pld_device, const char *filename)
 {
-	return gemini_program_device(pld_device, filename, GEMINI_PRG_MODE_FPGA, 0);
+	return ERROR_NOT_IMPLEMENTED;
+}
+
+static struct pld_device *gemini_get_pld_device_driver(void)
+{
+	struct pld_device *device = NULL;
+	int i = 0;
+
+	while (1)
+	{
+		// locate pld driver named 'gemini' by index start from 0 and by right only one gemini pld driver
+		device = get_pld_device_by_num(i++);
+		if (!device) break;
+		if (strcmp(device->driver->name, "gemini") != 0) {
+			continue;
+		}
+		break;
+	}
+
+	return device;
 }
 
 PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
 {
 	struct gemini_pld_device *gemini_info;
+	int ret = ERROR_OK;
 
 	if (CMD_ARGC < 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	struct target *target = get_target(CMD_ARGV[1]);
-	if (!target) {
-		command_print(CMD, "Target: %s does not exist", CMD_ARGV[1]);
-		return ERROR_FAIL;
-	}
-
-	if (!target->tap) {
-		command_print(CMD, "Target: %s is not on jtag chain", CMD_ARGV[1]);
-		return ERROR_FAIL;
-	}
-
+	// allocate memory for devices
 	gemini_info = malloc(sizeof(struct gemini_pld_device));
-	gemini_info->target = target;
-	gemini_info->tap = target->tap;
+	gemini_info->count = CMD_ARGC - 1;
+	gemini_info->target_info = malloc(sizeof(struct target_info_t) * gemini_info->count);
 
-	pld->driver_priv = gemini_info;
+	// enumerate all passed in targets
+	for (uint32_t i = 0; i < gemini_info->count; ++i)
+	{
+		struct target *target = get_target(CMD_ARGV[i+1]);
+		if (!target || !target->tap)
+		{
+			command_print(CMD, "Target: %s is invalid", CMD_ARGV[i+1]);
+			ret = ERROR_FAIL;
+			break;
+		}
 
-	return ERROR_OK;
+		gemini_info->target_info[i].target = target;
+		gemini_info->target_info[i].tap = target->tap;
+	}
+
+	if (ret == ERROR_OK)
+	{
+		pld->driver_priv = gemini_info;
+	}
+	else
+	{
+		free(gemini_info->target_info);
+		free(gemini_info);
+	}
+
+	return ret;
+}
+
+static char *get_cmdline_option(struct command_invocation *cmd, char *optname, char *defvalue)
+{
+	char *optval = defvalue;
+
+	for (unsigned int i = 0; i < CMD_ARGC; ++i) {
+		if (!strcmp(CMD_ARGV[i], optname)) {
+			if ((i + 1) < CMD_ARGC)
+				optval = (char *)CMD_ARGV[i+1];
+			break;
+		}
+	}
+
+	return optval;
 }
 
 COMMAND_HANDLER(gemini_handle_load_command)
 {
 	struct timeval start, end, duration;
-	struct pld_device *device;
+	struct pld_device *pld_device;
+	struct gemini_pld_device *gemini_device = NULL;
+	struct device_t *device = NULL;
 	int retval;
 	unsigned int progress_log = 0;
-	unsigned int dev_id;
+	unsigned int index;
 	enum gemini_prg_mode mode;
 
 	gettimeofday(&start, NULL);
@@ -847,10 +967,16 @@ COMMAND_HANDLER(gemini_handle_load_command)
 	if (CMD_ARGC < 3)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
-	device = get_pld_device_by_num(dev_id);
-	if (!device) {
-		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+	pld_device = gemini_get_pld_device_driver();
+	if (!pld_device) {
+		command_print(CMD, "pld device driver 'gemini' not found");
+		return ERROR_FAIL;
+	}
+
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
+	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	if (index >= gemini_device->count) {
+		command_print(CMD, "device index '#%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_FAIL;
 	}
 
@@ -863,68 +989,61 @@ COMMAND_HANDLER(gemini_handle_load_command)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
-	if (CMD_ARGC > 3)
+	if (gemini_get_device_type(get_cmdline_option(CMD, "-d", "gemini"), &device) != ERROR_OK)
 	{
-		if (!strcmp(CMD_ARGV[3], "-p"))
-		{
-			if (CMD_ARGC > 4)
-				COMMAND_PARSE_NUMBER(uint, CMD_ARGV[4], progress_log);
-			else
-				progress_log = 1;
-		}
-		else
-		{
-			command_print(CMD, "invalid option %s", CMD_ARGV[3]);
-			return ERROR_COMMAND_SYNTAX_ERROR;
-		}
+		command_print(CMD, "invalid device '%s'", get_cmdline_option(CMD, "-d", NULL));
+		return ERROR_FAIL;
 	}
 
-	retval = gemini_program_device(device, CMD_ARGV[2], mode, progress_log);
-	if (retval != ERROR_OK)
-		command_print(CMD, "failed loading file %s to pld device %u", CMD_ARGV[2], dev_id);
-	else {
+	COMMAND_PARSE_NUMBER(uint, get_cmdline_option(CMD, "-p", "0"), progress_log);
+
+	retval = gemini_program_device(gemini_device->target_info[index].target, device, CMD_ARGV[2], mode, progress_log);
+	if (retval != ERROR_OK) {
+		command_print(CMD, "failed loading file %s to device %u", CMD_ARGV[2], index);
+	} else {
 		gettimeofday(&end, NULL);
 		timeval_subtract(&duration, &end, &start);
-		command_print(CMD, "loaded file %s to pld device %u in %jis %jius", CMD_ARGV[2], dev_id,
+		command_print(CMD, "loaded file %s to device %u in %jis %jius", CMD_ARGV[2], index,
 			(intmax_t)duration.tv_sec, (intmax_t)duration.tv_usec);
 	}
 
 	return retval;
 }
 
-static char *get_product_name_by_idcode(uint32_t idcode)
-{
-	switch (idcode)
-	{
-		case GEMINI_IDCODE:
-			return "Gemini";
-		default:
-			break;
-	}
-	return "Unknown";
-}
-
 COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 {
-	struct pld_device *device = NULL;
+	struct pld_device *pld_device = NULL;
 	struct gemini_pld_device *gemini_device = NULL;
-	unsigned int dev_id;
+	struct device_t *device = NULL;
 	uint32_t cfg_done;
 	uint32_t cfg_error;
+	unsigned int index = 0;
 
 	if (CMD_ARGC < 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
-	device = get_pld_device_by_num(dev_id);
-	if (!device) {
-		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+	pld_device = gemini_get_pld_device_driver();
+	if (!pld_device) {
+		command_print(CMD, "pld device driver 'gemini' not found");
 		return ERROR_FAIL;
 	}
 
-	gemini_device = (struct gemini_pld_device *)(device->driver_priv);
+	// check if index is not out of bound
+	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
+	if (index >= gemini_device->count)
+	{
+		command_print(CMD, "device index '#%s' is out of bounds", CMD_ARGV[0]);
+		return ERROR_FAIL;
+	}
 
-	if (gemini_get_config_status(gemini_device->target, &cfg_done, &cfg_error) != ERROR_OK)
+	if (gemini_get_device_type(get_cmdline_option(CMD, "-d", "gemini"), &device) != ERROR_OK)
+	{
+		command_print(CMD, "invalid device '%s'", get_cmdline_option(CMD, "-d", NULL));
+		return ERROR_FAIL;
+	}
+
+	if (gemini_get_config_status(gemini_device->target_info[index].target, device, &cfg_done, &cfg_error) != ERROR_OK)
 		return ERROR_FAIL;
 
 	// print header
@@ -932,40 +1051,39 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 	command_print(CMD, "----------- -------------------- ---------- ----------");
 
 	// print cfg done and error status
-	command_print(CMD, "Found %5d %-20s %-10d %-10d", dev_id, get_product_name_by_idcode(gemini_device->tap->idcode), cfg_done, cfg_error);
+	command_print(CMD, "Found %5d %-20s %-10d %-10d", index, device->name, cfg_done, cfg_error);
 
 	return ERROR_OK;
 }
 
 COMMAND_HANDLER(gemini_handle_list_device_command)
 {
-	struct pld_device *device = NULL;
+	struct pld_device *pld_device = NULL;
 	struct gemini_pld_device *gemini_device = NULL;
-	int i = 0;
+	struct device_t *device = NULL;
+
+	pld_device = gemini_get_pld_device_driver();
+	if (!pld_device) {
+		command_print(CMD, "pld device driver 'gemini' not found");
+		return ERROR_FAIL;
+	}
+
+	if (gemini_get_device_type(get_cmdline_option(CMD, "-d", "gemini"), &device) != ERROR_OK)
+	{
+		command_print(CMD, "invalid device '%s'", get_cmdline_option(CMD, "-d", NULL));
+		return ERROR_FAIL;
+	}
 
 	// print header
 	command_print(CMD, "         Device               ID           IRLen      Flash Size      ");
 	command_print(CMD, "-------- -------------------- ------------ ---------- ----------------");
 
-	while (1)
+	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	for (uint32_t i = 0; i < gemini_device->count; ++i)
 	{
-		device = get_pld_device_by_num(i);
-		if (!device)
-			break;
-
-		if (strcmp(device->driver->name, "gemini") != 0)
-			continue;
-
-		gemini_device = (struct gemini_pld_device *)(device->driver_priv);
-		if (gemini_device->tap)
-		{
-			// print device details
-			command_print(CMD, "Found %2d %-20s 0x%-10x %-10d %d", i, get_product_name_by_idcode(gemini_device->tap->idcode),
-							gemini_device->tap->idcode,
-							gemini_device->tap->ir_length,
-							1024*16 /*place holder*/);
-		}
-		++i;
+		// print device details
+		command_print(CMD, "Found %2d %-20s 0x%-10x %-10d %d", i, device->name,	gemini_device->target_info[i].tap->idcode,
+						gemini_device->target_info[i].tap->ir_length, 1024*16 /*place holder*/);
 	}
 
 	return ERROR_OK;
@@ -991,7 +1109,7 @@ static const struct command_registration gemini_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.handler = gemini_handle_list_device_command,
 		.help = "list all devices",
-		.usage = "index",
+		.usage = "",
 	},
 	COMMAND_REGISTRATION_DONE
 };
@@ -1000,7 +1118,7 @@ static const struct command_registration gemini_command_handler[] = {
 	{
 		.name = "gemini",
 		.mode = COMMAND_ANY,
-		.help = "Rapid Silicon Gemini specific commands",
+		.help = "Rapid Silicon device specific commands",
 		.usage = "",
 		.chain = gemini_exec_command_handlers,
 	},

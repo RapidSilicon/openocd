@@ -13,9 +13,26 @@
 #include <target/target_type.h>
 #include <target/riscv/riscv.h>
 
-struct gemini_pld_device {
+struct device_t {
+	char *name;
+	intptr_t debug_control;
+	intptr_t spare_reg;
+	intptr_t cfg_status;
+	intptr_t fsbl_ubi_addr;
+	uint32_t ram_size;
+	intptr_t cbuffer;
+	intptr_t read_counter;
+	intptr_t writer_counter;
+};
+
+struct target_info_t {
 	struct target *target;
 	struct jtag_tap *tap;
+};
+
+struct gemini_pld_device {
+	struct target_info_t *target_info;
+	uint32_t count;
 };
 
 struct gemini_stats {
@@ -24,6 +41,7 @@ struct gemini_stats {
 	uint32_t cicular_buffer_full_count;
 	uint8_t package_count;
 	uint8_t log;
+	uint32_t timeout_counter;
 	uint32_t wait_time_us;
 	uint64_t total_overall_us;
 	uint64_t total_us;

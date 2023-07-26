@@ -96,7 +96,7 @@ uint32_t gemini_get_bop_id(uint8_t *bop)
 
 int gemini_is_xcb_bop(uint32_t id)
 {
-	return (id == BOP_FCB || id == BOP_ICB || id == BOP_PCB) ? true : false;
+	return (id == BOP_FCB || id == BOP_ICB || id == BOP_PCB || id == BOP_FPGA) ? true : false;
 }
 
 uint64_t gemini_get_bop_size(uint8_t *bop)
@@ -108,6 +108,7 @@ uint64_t gemini_get_bop_size(uint8_t *bop)
 		case BOP_FCB:
 		case BOP_ICB:
 		case BOP_PCB:
+		case BOP_FPGA:
 			return *(uint64_t *)(bop + OFFSET_NEW);
 		case BOP_MANF:
 		case BOP_FSBL:
@@ -147,10 +148,11 @@ uint8_t *gemini_get_next_bop(gemini_bit_file_t *bit_file)
 	return bit_file->current_bop;
 }
 
-uint64_t gemini_get_total_packages_size(gemini_bit_file_t *bit_file)
+int gemini_get_total_packages_size(gemini_bit_file_t *bit_file, uint32_t block_size, uint64_t *total_size)
 {
-	uint64_t total_size = 0;
 	uint8_t *bop = NULL;
+	int ret = 0;
+	*total_size = 0;
 
 	if (!bit_file)
 		return 0;
@@ -159,9 +161,17 @@ uint64_t gemini_get_total_packages_size(gemini_bit_file_t *bit_file)
 	while (bop != NULL)
 	{
 		if (gemini_is_xcb_bop(gemini_get_bop_id(bop)) == true)
-			total_size += gemini_get_bop_size(bop);
+		{
+			uint64_t bop_size = gemini_get_bop_size(bop);
+			if ((bop_size % block_size) != 0)
+			{
+				ret = -1;
+				break;
+			}
+			*total_size += bop_size;
+		}
 		bop = gemini_get_next_bop(bit_file);
 	}
 
-	return total_size;
+	return ret;
 }
