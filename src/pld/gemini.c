@@ -26,7 +26,7 @@
 #define GEMINI_PRODUCT_ID			0x31303050
 #define GEMINI_BLOCK_SIZE			2048
 #define GEMINI_NUM_OF_BLOCKS		4
-#define GEMINI_TIMEOUT_COUNTER		1000
+#define GEMINI_TIMEOUT_COUNTER		500
 #define GEMINI_WAIT_TIME_US			30000
 #define GEMINI_BUFFER_ADDR(base, x)	(base + ((x % GEMINI_NUM_OF_BLOCKS) * GEMINI_BLOCK_SIZE))
 #define GEMINI_ACPU					1
@@ -701,6 +701,12 @@ static int gemini_program_bitstream(struct target *target, struct device_t *devi
 		return ERROR_FAIL;
 	}
 
+	if (stats.total_packages_size == 0)
+	{
+		LOG_ERROR("[RS] Bitstream doens't contain any FPGA configuration BOP");
+		return ERROR_FAIL;
+	}
+
 	stats.data_sent = 0;
 	stats.package_count = 0;
 	stats.cicular_buffer_full_count = 0;
@@ -906,7 +912,7 @@ PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
 	for (uint32_t i = 0; i < gemini_info->count; ++i)
 	{
 		struct target *target = get_target(CMD_ARGV[i+1]);
-		if (!target && !target->tap)
+		if (!target || !target->tap)
 		{
 			command_print(CMD, "Target: %s is invalid", CMD_ARGV[i+1]);
 			ret = ERROR_FAIL;
