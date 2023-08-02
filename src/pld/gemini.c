@@ -522,7 +522,7 @@ static int gemini_init_ddr(struct target *target, struct device_t *device)
 static void gemini_print_stats(struct gemini_stats *stats)
 {
 	uint64_t num_blocks = stats->data_sent / GEMINI_BLOCK_SIZE;
-	uint64_t avg = stats->total_us / num_blocks;
+	uint64_t avg = num_blocks > 0 ? stats->total_us / num_blocks : 0;
 
 	LOG_INFO("[RS] -- Statistic -----------------------------------------------------------");
 	LOG_INFO("[RS]    1. total_packages_size        : %" PRIu64, stats->total_packages_size);
@@ -814,14 +814,16 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 	}
 
 	// stream 2k data block to device
-	if (gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats) != ERROR_OK)
-		return ERROR_FAIL;
+	retval = gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats);
+	if (retval == ERROR_OK)
+	{
+		retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
+	}
 
 	if (stats.log & 2)
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
