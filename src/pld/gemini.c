@@ -56,7 +56,7 @@ struct device_t device_table[] =
 		.ram_size       = 261120, /* 255kb SRAM */
 		.cbuffer        = 0x80000000,
 		.read_counter   = 0x80003ffc,
-		.writer_counter = 0x80003ff8,
+		.write_counter  = 0x80003ff8,
 	},
 #elif defined(PROTOTYPE_BUILD)
     {
@@ -68,7 +68,7 @@ struct device_t device_table[] =
 		.ram_size       = 131072, /* 128kb SRAM */
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
-		.writer_counter = 0x8003FDF8,
+		.write_counter  = 0x8003FDF8,
 	},
 #else
     {
@@ -80,7 +80,7 @@ struct device_t device_table[] =
 		.ram_size       = 261120, /* 255k SRAM */
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
-		.writer_counter = 0x8003FDF8,
+		.write_counter  = 0x8003FDF8,
 	},
     {
 		.name           = "virgo",
@@ -91,7 +91,7 @@ struct device_t device_table[] =
 		.ram_size       = 65536, /* 64kb ILM */
 		.cbuffer        = 0xA040DFF8,
 		.read_counter   = 0xA040FFFC,
-		.writer_counter = 0xA040FFF8,
+		.write_counter  = 0xA040FFF8,
 	},
 #endif
 };
@@ -539,9 +539,9 @@ static void gemini_print_stats(struct gemini_stats *stats)
 
 static int gemini_reset_read_write_counters(struct target *target, struct device_t *device)
 {
-	if (gemini_write_reg32(target, device->writer_counter, 32, 0, 0) != ERROR_OK)
+	if (gemini_write_reg32(target, device->write_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->writer_counter);
+		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->write_counter);
 		return ERROR_FAIL;
 	}
 
@@ -626,9 +626,9 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 			if (retval != ERROR_OK)
 				break;
 
-			if (target_write_u32(target, device->writer_counter, write_counter) != ERROR_OK)
+			if (target_write_u32(target, device->write_counter, write_counter) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->writer_counter);
+				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->write_counter);
 				retval = ERROR_FAIL;
 				break;
 			}
