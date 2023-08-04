@@ -734,7 +734,7 @@ static int gemini_program_bitstream(struct target *target, struct device_t *devi
 				break;
 			}
 
-			// stream 2k data blocks onto device
+			// stream fpga bop data in fixed 2k block size to the device
 			++stats.package_count;
 			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), &stats)) != ERROR_OK)
 			{
@@ -813,7 +813,7 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 		return ERROR_FAIL;
 	}
 
-	// stream 2k data block to device
+	// stream file data in fixed 2k block size to the device
 	retval = gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats);
 	if (retval == ERROR_OK)
 	{
