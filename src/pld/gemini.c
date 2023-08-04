@@ -600,7 +600,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 		if ((write_counter - read_counter) > GEMINI_NUM_OF_BLOCKS)
 		{
-			LOG_ERROR("[RS] No. of pending buffers %d cannot be greater than %d", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
+			LOG_ERROR("[RS] The available blocks (%d) is greater than %d", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
 			retval = ERROR_FAIL;
 			break;
 		}
