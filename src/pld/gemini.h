@@ -22,7 +22,7 @@ struct device_t {
 	uint32_t ram_size;
 	intptr_t cbuffer;
 	intptr_t read_counter;
-	intptr_t writer_counter;
+	intptr_t write_counter;
 };
 
 struct target_info_t {

@@ -56,7 +56,7 @@ struct device_t device_table[] =
 		.ram_size       = 261120, /* 255kb SRAM */
 		.cbuffer        = 0x80000000,
 		.read_counter   = 0x80003ffc,
-		.writer_counter = 0x80003ff8,
+		.write_counter  = 0x80003ff8,
 	},
 #elif defined(PROTOTYPE_BUILD)
     {
@@ -68,7 +68,7 @@ struct device_t device_table[] =
 		.ram_size       = 131072, /* 128kb SRAM */
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
-		.writer_counter = 0x8003FDF8,
+		.write_counter  = 0x8003FDF8,
 	},
 #else
     {
@@ -80,7 +80,7 @@ struct device_t device_table[] =
 		.ram_size       = 261120, /* 255k SRAM */
 		.cbuffer        = 0x8003DDF8,
 		.read_counter   = 0x8003FDFC,
-		.writer_counter = 0x8003FDF8,
+		.write_counter  = 0x8003FDF8,
 	},
     {
 		.name           = "virgo",
@@ -91,7 +91,7 @@ struct device_t device_table[] =
 		.ram_size       = 65536, /* 64kb ILM */
 		.cbuffer        = 0xA040DFF8,
 		.read_counter   = 0xA040FFFC,
-		.writer_counter = 0xA040FFF8,
+		.write_counter  = 0xA040FFF8,
 	},
 #endif
 };
@@ -522,7 +522,7 @@ static int gemini_init_ddr(struct target *target, struct device_t *device)
 static void gemini_print_stats(struct gemini_stats *stats)
 {
 	uint64_t num_blocks = stats->data_sent / GEMINI_BLOCK_SIZE;
-	uint64_t avg = stats->total_us / num_blocks;
+	uint64_t avg = num_blocks > 0 ? stats->total_us / num_blocks : 0;
 
 	LOG_INFO("[RS] -- Statistic -----------------------------------------------------------");
 	LOG_INFO("[RS]    1. total_packages_size        : %" PRIu64, stats->total_packages_size);
@@ -539,9 +539,9 @@ static void gemini_print_stats(struct gemini_stats *stats)
 
 static int gemini_reset_read_write_counters(struct target *target, struct device_t *device)
 {
-	if (gemini_write_reg32(target, device->writer_counter, 32, 0, 0) != ERROR_OK)
+	if (gemini_write_reg32(target, device->write_counter, 32, 0, 0) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->writer_counter);
+		LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->write_counter);
 		return ERROR_FAIL;
 	}
 
@@ -600,7 +600,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 		if ((write_counter - read_counter) > GEMINI_NUM_OF_BLOCKS)
 		{
-			LOG_ERROR("[RS] No. of pending buffers %d cannot be greater than %d", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
+			LOG_ERROR("[RS] The available blocks (%d) is greater than %d", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -626,9 +626,9 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 			if (retval != ERROR_OK)
 				break;
 
-			if (target_write_u32(target, device->writer_counter, write_counter) != ERROR_OK)
+			if (target_write_u32(target, device->write_counter, write_counter) != ERROR_OK)
 			{
-				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->writer_counter);
+				LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->write_counter);
 				retval = ERROR_FAIL;
 				break;
 			}
@@ -734,7 +734,7 @@ static int gemini_program_bitstream(struct target *target, struct device_t *devi
 				break;
 			}
 
-			// stream 2k data blocks onto device
+			// stream fpga bop data in fixed 2k block size to the device
 			++stats.package_count;
 			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), &stats)) != ERROR_OK)
 			{
@@ -813,15 +813,17 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 		return ERROR_FAIL;
 	}
 
-	// stream 2k data block to device
-	if (gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats) != ERROR_OK)
-		return ERROR_FAIL;
+	// stream file data in fixed 2k block size to the device
+	retval = gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats);
+	if (retval == ERROR_OK)
+	{
+		retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
+	}
 
 	if (stats.log & 2)
 		gemini_print_stats(&stats);
 
 	// check cmd status
-	retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
