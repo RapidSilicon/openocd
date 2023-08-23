@@ -977,7 +977,8 @@ COMMAND_HANDLER(gemini_handle_load_command)
 
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
 	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
-	if (index >= gemini_device->count) {
+	// user input is 1-based indexing. internally is 0-based indexing
+	if ((index - 1) >= gemini_device->count) {
 		command_print(CMD, "device index '#%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_FAIL;
 	}
@@ -999,7 +1000,7 @@ COMMAND_HANDLER(gemini_handle_load_command)
 
 	COMMAND_PARSE_NUMBER(uint, get_cmdline_option(CMD, "-p", "0"), progress_log);
 
-	retval = gemini_program_device(gemini_device->target_info[index].target, device, CMD_ARGV[2], mode, progress_log);
+	retval = gemini_program_device(gemini_device->target_info[index - 1].target, device, CMD_ARGV[2], mode, progress_log);
 	if (retval != ERROR_OK) {
 		command_print(CMD, "failed loading file %s to device %u", CMD_ARGV[2], index);
 	} else {
@@ -1049,11 +1050,11 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 		return ERROR_FAIL;
 
 	// print header
-	command_print(CMD, "            Device               cfg_done   cfg_error ");
-	command_print(CMD, "----------- -------------------- ---------- ----------");
+	command_print(CMD, "      | Index  | Device                                  | cfg_done | cfg_error");
+	command_print(CMD, "------ -------- ----------------------------------------- ---------- ----------");
 
 	// print cfg done and error status
-	command_print(CMD, "Found %5d %-20s %-10d %-10d", index, device->name, cfg_done, cfg_error);
+	command_print(CMD, "Found   %-7d  %-40s  %-9d  %d", index + 1, device->name, cfg_done, cfg_error);
 
 	return ERROR_OK;
 }
@@ -1077,14 +1078,14 @@ COMMAND_HANDLER(gemini_handle_list_device_command)
 	}
 
 	// print header
-	command_print(CMD, "         Device               ID           IRLen      Flash Size      ");
-	command_print(CMD, "-------- -------------------- ------------ ---------- ----------------");
+	command_print(CMD, "      | Index  | Device                                  | ID         | IRLen    | Flash Size      ");
+	command_print(CMD, "------ -------- ----------------------------------------- ------------ ---------- -----------------");
 
 	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
 	for (uint32_t i = 0; i < gemini_device->count; ++i)
 	{
 		// print device details
-		command_print(CMD, "Found %2d %-20s 0x%-10x %-10d %d", i, device->name,	gemini_device->target_info[i].tap->idcode,
+		command_print(CMD, "Found   %-7d  %-40s  0x%-9x  %-9d  %d", i + 1, device->name, gemini_device->target_info[i].tap->idcode,
 						gemini_device->target_info[i].tap->ir_length, 1024*16 /*place holder*/);
 	}
 
