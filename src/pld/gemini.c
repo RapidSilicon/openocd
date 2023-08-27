@@ -1034,7 +1034,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 	// check if index is not out of bound
 	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
-	if (index >= gemini_device->count)
+	if ((index - 1) >= gemini_device->count)
 	{
 		command_print(CMD, "device index '#%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_FAIL;
@@ -1046,7 +1046,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 		return ERROR_FAIL;
 	}
 
-	if (gemini_get_config_status(gemini_device->target_info[index].target, device, &cfg_done, &cfg_error) != ERROR_OK)
+	if (gemini_get_config_status(gemini_device->target_info[index - 1].target, device, &cfg_done, &cfg_error) != ERROR_OK)
 		return ERROR_FAIL;
 
 	// print header
