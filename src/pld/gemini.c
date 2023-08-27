@@ -1054,7 +1054,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 	command_print(CMD, "------ -------- ----------------------------------------- ---------- ----------");
 
 	// print cfg done and error status
-	command_print(CMD, "Found   %-7d  %-40s  %-9d  %d", index + 1, device->name, cfg_done, cfg_error);
+	command_print(CMD, "Found   %-7d  %-40s  %-9d  %d", index, device->name, cfg_done, cfg_error);
 
 	return ERROR_OK;
 }
