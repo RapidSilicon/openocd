@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-#define LOCAL_BUILD
+//#define LOCAL_BUILD
 //#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
