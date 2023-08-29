@@ -803,6 +803,9 @@ static int gemini_program_otp(struct target *target, struct device_t *device, ge
 		bop = gemini_get_next_bop(bit_file);
 	}
 
+	if (option.log & 2)
+		gemini_print_stats(&option);
+
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
