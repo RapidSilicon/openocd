@@ -41,7 +41,8 @@
 
 enum gemini_prg_mode {
 	GEMINI_PRG_MODE_FPGA,
-	GEMINI_PRG_MODE_SPI_FLASH
+	GEMINI_PRG_MODE_SPI_FLASH,
+	GEMINI_PRG_MODE_OTP
 };
 
 struct device_t device_table[] =
@@ -237,7 +238,7 @@ static int gemini_get_firmware_type(struct target * target, struct device_t *dev
 	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
 	{
 		spare_reg >>= 29;
-		if (spare_reg == GEMINI_PRG_FW_TYPE_BOOTROM || spare_reg == GEMINI_PRG_FW_TYPE_CFG_FSBL)
+		if (spare_reg == PRG_REG_FW_TYPE_BOOTROM || spare_reg == PRG_REG_FW_TYPE_CFG_FSBL)
 		{
 			*fw_type = spare_reg;
 			return ERROR_OK;
@@ -378,7 +379,7 @@ static int gemini_poll_command_complete_and_status(struct target *target, struct
 		retval = gemini_get_command_status(target, device, status);
 		if (retval != ERROR_OK)
 			break;
-		if (*status != GEMINI_PRG_ST_PENDING)
+		if (*status != PRG_REG_ST_PENDING)
 			break;
 		if (num_polls == 0) {
 			LOG_ERROR("[RS] Timed out waiting for task to complete.");
@@ -392,13 +393,13 @@ static int gemini_poll_command_complete_and_status(struct target *target, struct
 	// check the command status
 	if (retval == ERROR_OK)
 	{
-		if (*status != GEMINI_PRG_ST_TASK_COMPLETE) {
+		if (*status != PRG_REG_ST_TASK_COMPLETE) {
 			LOG_ERROR("[RS] Command error %d", *status);
 			retval = ERROR_FAIL;
 		}
 	}
 	// clear command and status field
-	gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_IDLE);
+	gemini_write_reg32(target, device->spare_reg, 16, 0, PRG_REG_TSK_CMD_IDLE);
 
 	return retval;
 }
@@ -417,7 +418,7 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 		return ERROR_FAIL;
 	}
 
-	if (fw_type == GEMINI_PRG_FW_TYPE_CFG_FSBL)
+	if (fw_type == PRG_REG_FW_TYPE_CFG_FSBL)
 	{
 		LOG_INFO("[RS] FSBL firmware type detected");
 		return ERROR_OK;
@@ -455,9 +456,9 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 		return ERROR_FAIL;
 	}
 
-	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, PRG_REG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, PRG_REG_TSK_CMD_BBF_FDI, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
@@ -465,7 +466,7 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 	if (retval == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
-		if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK || fw_type != GEMINI_PRG_FW_TYPE_CFG_FSBL)
+		if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK || fw_type != PRG_REG_FW_TYPE_CFG_FSBL)
 			retval = ERROR_FAIL;
 	}
 
@@ -500,9 +501,9 @@ static int gemini_init_ddr(struct target *target, struct device_t *device)
 
 	LOG_INFO("[RS] Initializing DDR memory...");
 
-	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_BBF_FDI) != ERROR_OK)
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, PRG_REG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_BBF_FDI, device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, PRG_REG_TSK_CMD_BBF_FDI, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
@@ -554,7 +555,7 @@ static int gemini_reset_read_write_counters(struct target *target, struct device
 	return ERROR_OK;
 }
 
-static int gemini_stream_data_blocks(struct target *target, struct device_t *device, uint8_t *data, uint64_t data_size, struct gemini_stats *stats)
+static int gemini_stream_data_blocks(struct target *target, struct device_t *device, uint8_t *data, uint64_t data_size, uint32_t task_id, struct gemini_stats *stats)
 {
 	int retval = ERROR_OK;
 	struct duration block_duration, bop_duration;
@@ -564,12 +565,18 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 	uint32_t block_counter = data_size / GEMINI_BLOCK_SIZE;
 	uint32_t spare_reg = 0;
 
-	// 1. halt target
-	// 2. retrieve read counter
-	// 3. validate read and write counters
-	// 4. transfer blocks to the available cbuffer
-	// 5. increment write pointer
-	// 6. wait 20ms
+	// reset read/write counters
+	if (gemini_reset_read_write_counters(target, device) != ERROR_OK)
+	{
+		return ERROR_FAIL;
+	}
+
+	// write task cmd
+	if (gemini_write_reg32(target, device->spare_reg, 16, 0, task_id) != ERROR_OK)
+	{
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, task_id, device->spare_reg);
+		return ERROR_FAIL;
+	}
 
 	duration_start(&bop_duration);
 
@@ -684,75 +691,54 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 	return retval;
 }
 
-static int gemini_program_bitstream(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int progress_log)
+static int gemini_program_bitstream(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int log_level)
 {
 	int retval = ERROR_OK;
-	uint32_t cfg_done;
-	uint32_t cfg_error;
+	uint32_t cfg_done, cfg_error;
 	uint32_t status;
 	uint8_t *bop;
-	struct gemini_stats stats = { 0 };
+	struct gemini_stats option = { 0 };
 
 	LOG_INFO("[RS] Configuring FPGA fabric...");
 
-	if (gemini_get_total_packages_size(bit_file, GEMINI_BLOCK_SIZE, &stats.total_packages_size) != 0)
+	if (gemini_get_total_packages_size(bit_file, GEMINI_BLOCK_SIZE, BOP_FPGA, &option.total_packages_size) != 0)
 	{
 		LOG_ERROR("[RS] Bitstream BOP size is not multiple of %d bytes", GEMINI_BLOCK_SIZE);
 		return ERROR_FAIL;
 	}
 
-	if (stats.total_packages_size == 0)
+	if (option.total_packages_size == 0)
 	{
 		LOG_ERROR("[RS] Bitstream doens't contain any FPGA configuration BOP");
 		return ERROR_FAIL;
 	}
 
-	stats.data_sent = 0;
-	stats.package_count = 0;
-	stats.cicular_buffer_full_count = 0;
-	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
-	stats.wait_time_us = GEMINI_WAIT_TIME_US;
-	stats.log = progress_log;
+	option.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	option.wait_time_us = GEMINI_WAIT_TIME_US;
+	option.log = log_level;
 
 	bop = gemini_get_first_bop(bit_file);
 	while (bop != NULL)
 	{
-		if (gemini_is_xcb_bop(gemini_get_bop_id(bop)) == true)
+		if (gemini_is_bop_type(bop, BOP_FPGA) == true)
 		{
-			// reset read/write counters
-			if (gemini_reset_read_write_counters(target, device) != ERROR_OK)
-			{
-				retval = ERROR_FAIL;
-				break;
-			}
-
-			// write task cmd
-			if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA) != ERROR_OK)
-			{
-				LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FPGA, device->spare_reg);
-				retval = ERROR_FAIL;
-				break;
-			}
-
-			// stream fpga bop data in fixed 2k block size to the device
-			++stats.package_count;
-			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), &stats)) != ERROR_OK)
+			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), PRG_REG_TSK_CMD_CFG_BITSTREAM_FPGA, &option)) != ERROR_OK)
 			{
 				break;
 			}
 
-			// check final cmd status
-			if ((retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter)) != ERROR_OK)
+			if ((retval = gemini_poll_command_complete_and_status(target, device, &status, option.wait_time_us, option.timeout_counter)) != ERROR_OK)
 			{
 				break;
 			}
+			option.package_count += 1;
 		}
 
 		bop = gemini_get_next_bop(bit_file);
 	}
 
-	if (stats.log & 2)
-		gemini_print_stats(&stats);
+	if (option.log & 2)
+		gemini_print_stats(&option);
 
 	if (retval != ERROR_OK)
 	{
@@ -779,11 +765,11 @@ static int gemini_program_bitstream(struct target *target, struct device_t *devi
 	return retval;
 }
 
-static int gemini_program_flash(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int progress_log)
+static int gemini_program_flash(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int log_level)
 {
 	int retval = ERROR_OK;
 	uint32_t status;
-	struct gemini_stats stats = { 0 };
+	struct gemini_stats option = { 0 };
 	uint64_t filesize = (uint64_t)bit_file->filesize;
 
 	LOG_INFO("[RS] Programming SPI Flash...");
@@ -794,36 +780,21 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 		return ERROR_FAIL;
 	}
 
-	stats.total_packages_size = filesize;
-	stats.data_sent = 0;
-	stats.package_count = 1;
-	stats.cicular_buffer_full_count = 0;
-	stats.timeout_counter = GEMINI_TIMEOUT_COUNTER;
-	stats.wait_time_us = GEMINI_WAIT_TIME_US;
-	stats.log = progress_log;
+	option.total_packages_size = filesize;
+	option.package_count = 1;
+	option.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	option.wait_time_us = GEMINI_WAIT_TIME_US;
+	option.log = log_level;
 
-	// reset read/write counters
-	if (gemini_reset_read_write_counters(target, device) != ERROR_OK)
-		return ERROR_FAIL;
-
-	// write task cmd
-	if (gemini_write_reg32(target, device->spare_reg, 16, 0, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, GEMINI_PRG_TSK_CMD_CFG_BITSTREAM_FLASH, device->spare_reg);
-		return ERROR_FAIL;
-	}
-
-	// stream file data in fixed 2k block size to the device
-	retval = gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, &stats);
+	retval = gemini_stream_data_blocks(target, device, (uint8_t *)bit_file->ubi_header, filesize, PRG_REG_TSK_CMD_CFG_BITSTREAM_FLASH, &option);
 	if (retval == ERROR_OK)
 	{
-		retval = gemini_poll_command_complete_and_status(target, device, &status, stats.wait_time_us, stats.timeout_counter);
+		retval = gemini_poll_command_complete_and_status(target, device, &status, option.wait_time_us, option.timeout_counter);
 	}
 
-	if (stats.log & 2)
-		gemini_print_stats(&stats);
+	if (option.log & 2)
+		gemini_print_stats(&option);
 
-	// check cmd status
 	if (retval != ERROR_OK)
 	{
 		if (retval == ERROR_TIMEOUT_REACHED)
@@ -833,6 +804,65 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 	else
 	{
 		LOG_INFO("[RS] Programmed SPI Flash successfully");
+	}
+
+	return retval;
+}
+
+static int gemini_program_otp(struct target *target, struct device_t *device, gemini_bit_file_t *bit_file, unsigned int log_level)
+{
+	int retval = ERROR_OK;
+	uint32_t status;
+	uint8_t *bop;
+	struct gemini_stats option = { 0 };
+
+	LOG_INFO("[RS] Programming OTP...");
+
+	if (gemini_get_total_packages_size(bit_file, GEMINI_BLOCK_SIZE, BOP_KEY_CERT, &option.total_packages_size) != 0)
+	{
+		LOG_ERROR("[RS] Bitstream BOP size is not multiple of %d bytes", GEMINI_BLOCK_SIZE);
+		return ERROR_FAIL;
+	}
+
+	if (option.total_packages_size == 0)
+	{
+		LOG_ERROR("[RS] Bitstream doens't contain any OTP configuration BOP");
+		return ERROR_FAIL;
+	}
+
+	option.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	option.wait_time_us = GEMINI_WAIT_TIME_US;
+	option.log = log_level;
+
+	bop = gemini_get_first_bop(bit_file);
+	while (bop != NULL)
+	{
+		if (gemini_is_bop_type(bop, BOP_KEY_CERT) == true)
+		{
+			if ((retval = gemini_stream_data_blocks(target, device, bop, gemini_get_bop_size(bop), PRG_REG_TSK_CMD_CFG_OTP, &option)) != ERROR_OK)
+			{
+				break;
+			}
+
+			if ((retval = gemini_poll_command_complete_and_status(target, device, &status, option.wait_time_us, option.timeout_counter)) != ERROR_OK)
+			{
+				break;
+			}
+			option.package_count += 1;
+		}
+
+		bop = gemini_get_next_bop(bit_file);
+	}
+
+	if (retval != ERROR_OK)
+	{
+		if (retval == ERROR_TIMEOUT_REACHED)
+			gemini_reset_bcpu(target); // reset target to known state when command timeout
+		LOG_ERROR("[RS] Failed to program OTP");
+	}
+	else
+	{
+		LOG_INFO("[RS] Programmed OTP successfully");
 	}
 
 	return retval;
@@ -864,6 +894,10 @@ static int gemini_program_device(struct target *target, struct device_t *device,
 
 	if (mode == GEMINI_PRG_MODE_SPI_FLASH)
 		if (gemini_program_flash(target, device, &bit_file, progress_log) != ERROR_OK)
+			goto err;
+
+	if (mode == GEMINI_PRG_MODE_OTP)
+		if (gemini_program_otp(target, device, &bit_file, progress_log) != ERROR_OK)
 			goto err;
 
 	// everything is completed successfully
@@ -987,8 +1021,10 @@ COMMAND_HANDLER(gemini_handle_load_command)
 		mode = GEMINI_PRG_MODE_FPGA;
 	else if (!strcmp(CMD_ARGV[1], "flash"))
 		mode = GEMINI_PRG_MODE_SPI_FLASH;
+	else if (!strcmp(CMD_ARGV[1], "otp"))
+		mode = GEMINI_PRG_MODE_OTP;
 	else {
-		command_print(CMD, "invalid mode '#%s'. supported modes are 'flash' and 'fpga' only", CMD_ARGV[1]);
+		command_print(CMD, "invalid mode '#%s'. supported modes are 'fpga', 'flash' and 'otp' only", CMD_ARGV[1]);
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
