@@ -63,7 +63,7 @@ struct device_t device_table[] =
     {
 		.name           = "gemini",
 		.debug_control  = 0xf1000028,
-		.spare_reg      = 0x8003DDF4,
+		.spare_reg      = 0x8003bdf0,
 		.cfg_status     = 0xf10a0000,
 		.fsbl_ubi_addr  = 0x80000000,
 		.ram_size       = 131072, /* 128kb SRAM */
