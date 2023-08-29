@@ -14,7 +14,7 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
+#define LOCAL_BUILD
 //#define PROTOTYPE_BUILD
 
 #ifdef LOCAL_BUILD
@@ -261,19 +261,6 @@ static int gemini_get_command_status(struct target *target, struct device_t *dev
 	return ERROR_FAIL;
 }
 
-static int gemini_get_ddr_status(struct target *target, struct device_t *device, uint32_t *status)
-{
-	uint32_t spare_reg;
-
-	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
-	{
-		*status = (spare_reg & (1u << 16)) ? DDR_INIT : DDR_NOT_INIT;
-		return ERROR_OK;
-	}
-
-	return ERROR_FAIL;
-}
-
 static int gemini_check_target_device(struct target *target, gemini_bit_file_t *bit_file)
 {
 	if (target->tap->idcode != GEMINI_IDCODE)
@@ -478,44 +465,6 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 	}
 	else
 		LOG_INFO("[RS] Boot up FSBL firmware of size %d bytes successfully.", fsbl_size);
-
-	return retval;
-}
-
-static int gemini_init_ddr(struct target *target, struct device_t *device)
-{
-	int retval = ERROR_OK;
-	uint32_t status;
-
-	if (gemini_get_ddr_status(target, device, &status) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to determine the DDR memory status");
-		return ERROR_FAIL;
-	}
-
-	if (status == DDR_INIT)
-	{
-		LOG_INFO("[RS] DDR memory is already initialized");
-		return ERROR_OK;
-	}
-
-	LOG_INFO("[RS] Initializing DDR memory...");
-
-	if (gemini_write_reg32(target, device->spare_reg, 16, 0, PRG_REG_TSK_CMD_BBF_FDI) != ERROR_OK)
-	{
-		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, PRG_REG_TSK_CMD_BBF_FDI, device->spare_reg);
-		return ERROR_FAIL;
-	}
-
-	retval = gemini_poll_command_complete_and_status(target, device, &status, MSEC(1000), 5);
-	if (retval != ERROR_OK)
-	{
-		if (retval == ERROR_TIMEOUT_REACHED)
-			gemini_reset_bcpu(target); // reset target to known state when command timeout
-		LOG_ERROR("[RS] Failed to initialize DDR memory");
-	}
-	else
-		LOG_INFO("[RS] DDR memory is initialized successfully");
 
 	return retval;
 }
@@ -883,9 +832,6 @@ static int gemini_program_device(struct target *target, struct device_t *device,
 		goto err;
 
 	if (gemini_load_fsbl(target, device, &bit_file) != ERROR_OK)
-		goto err;
-
-	if (gemini_init_ddr(target, device) != ERROR_OK)
 		goto err;
 
 	if (mode == GEMINI_PRG_MODE_FPGA)
