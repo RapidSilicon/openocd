@@ -40,9 +40,21 @@
 #define STATUS(x)					((x >> 10) & 0x3f)
 
 enum gemini_prg_mode {
+	GEMINI_PRG_MODE_NONE,
 	GEMINI_PRG_MODE_FPGA,
 	GEMINI_PRG_MODE_SPI_FLASH,
 	GEMINI_PRG_MODE_OTP
+};
+
+struct prg_mode_map_t {
+	char *name;
+	enum gemini_prg_mode mode;
+};
+
+struct prg_mode_map_t prg_modes[] = {
+	{ "fpga" , GEMINI_PRG_MODE_FPGA },
+	{ "flash", GEMINI_PRG_MODE_SPI_FLASH },
+	{ "opt"  , GEMINI_PRG_MODE_OTP }
 };
 
 struct device_t device_table[] =
@@ -945,7 +957,7 @@ COMMAND_HANDLER(gemini_handle_load_command)
 	int retval;
 	unsigned int progress_log = 0;
 	unsigned int index;
-	enum gemini_prg_mode mode;
+	enum gemini_prg_mode mode = GEMINI_PRG_MODE_NONE;
 
 	gettimeofday(&start, NULL);
 
@@ -966,14 +978,18 @@ COMMAND_HANDLER(gemini_handle_load_command)
 		return ERROR_FAIL;
 	}
 
-	if (!strcmp(CMD_ARGV[1], "fpga"))
-		mode = GEMINI_PRG_MODE_FPGA;
-	else if (!strcmp(CMD_ARGV[1], "flash"))
-		mode = GEMINI_PRG_MODE_SPI_FLASH;
-	else if (!strcmp(CMD_ARGV[1], "otp"))
-		mode = GEMINI_PRG_MODE_OTP;
-	else {
-		command_print(CMD, "invalid mode '#%s'. supported modes are 'fpga', 'flash' and 'otp' only", CMD_ARGV[1]);
+	for (unsigned long i = 0; i < sizeof(prg_modes) / sizeof(struct prg_mode_map_t); i++)
+	{
+		if (!strcmp(CMD_ARGV[1], prg_modes[i].name))
+		{
+			mode = prg_modes[i].mode;
+			break;
+		}
+	}
+
+	if (mode == GEMINI_PRG_MODE_NONE)
+	{
+		command_print(CMD, "Invalid programming mode '#%s'.", CMD_ARGV[1]);
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
