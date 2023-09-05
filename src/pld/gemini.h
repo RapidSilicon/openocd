@@ -30,12 +30,12 @@ struct target_info_t {
 	struct jtag_tap *tap;
 };
 
-struct gemini_pld_device {
+struct gemini_pld_device_t {
 	struct target_info_t *target_info;
 	uint32_t count;
 };
 
-struct gemini_stats {
+struct gemini_option_t {
 	uint64_t total_packages_size;
 	uint64_t data_sent;
 	uint32_t cicular_buffer_full_count;
