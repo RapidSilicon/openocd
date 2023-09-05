@@ -469,22 +469,22 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 	return retval;
 }
 
-static void gemini_print_stats(struct gemini_stats *stats)
+static void gemini_print_stats(struct gemini_option_t *option)
 {
-	uint64_t num_blocks = stats->data_sent / GEMINI_BLOCK_SIZE;
-	uint64_t avg = num_blocks > 0 ? stats->total_us / num_blocks : 0;
+	uint64_t num_blocks = option->data_sent / GEMINI_BLOCK_SIZE;
+	uint64_t avg = num_blocks > 0 ? option->total_us / num_blocks : 0;
 
 	LOG_INFO("[RS] -- Statistic -----------------------------------------------------------");
-	LOG_INFO("[RS]    1. total_packages_size        : %" PRIu64, stats->total_packages_size);
-	LOG_INFO("[RS]    2. package_count              : %d" , stats->package_count);
-	LOG_INFO("[RS]    3. data_sent                  : %" PRIu64, stats->data_sent);
-	LOG_INFO("[RS]    4. cicular_buffer_full_count  : %d" , stats->cicular_buffer_full_count);
+	LOG_INFO("[RS]    1. total_packages_size        : %" PRIu64, option->total_packages_size);
+	LOG_INFO("[RS]    2. package_count              : %d" , option->package_count);
+	LOG_INFO("[RS]    3. data_sent                  : %" PRIu64, option->data_sent);
+	LOG_INFO("[RS]    4. cicular_buffer_full_count  : %d" , option->cicular_buffer_full_count);
 	LOG_INFO("[RS]    5. total_blocks               : %" PRIu64, num_blocks);
-	LOG_INFO("[RS]    6. total_us                   : %" PRIu64 " (%f sec)", stats->total_us, stats->total_us / 1000000.0);
-	LOG_INFO("[RS]    7. total_overall_us           : %" PRIu64 " (%f sec)", stats->total_overall_us, stats->total_overall_us / 1000000.0);
-	LOG_INFO("[RS]    8. total_wait_us              : %" PRIu64 " (%f sec)", stats->total_overall_us - stats->total_us, (stats->total_overall_us - stats->total_us) / 1000000.0);
+	LOG_INFO("[RS]    6. total_us                   : %" PRIu64 " (%f sec)", option->total_us, option->total_us / 1000000.0);
+	LOG_INFO("[RS]    7. total_overall_us           : %" PRIu64 " (%f sec)", option->total_overall_us, option->total_overall_us / 1000000.0);
+	LOG_INFO("[RS]    8. total_wait_us              : %" PRIu64 " (%f sec)", option->total_overall_us - option->total_us, (option->total_overall_us - option->total_us) / 1000000.0);
 	LOG_INFO("[RS]    9. average us @ block         : %" PRIu64 " (%f sec)", avg, avg / 1000000.0);
-	LOG_INFO("[RS]   10. transfer rate              : %.5f kbps", stats->data_sent / (1024.0 * (stats->total_overall_us / 1000000.0)));
+	LOG_INFO("[RS]   10. transfer rate              : %.5f kbps", option->data_sent / (1024.0 * (option->total_overall_us / 1000000.0)));
 }
 
 static int gemini_reset_read_write_counters(struct target *target, struct device_t *device)
@@ -504,7 +504,7 @@ static int gemini_reset_read_write_counters(struct target *target, struct device
 	return ERROR_OK;
 }
 
-static int gemini_stream_data_blocks(struct target *target, struct device_t *device, uint8_t *data, uint64_t data_size, uint32_t task_id, struct gemini_stats *stats)
+static int gemini_stream_data_blocks(struct target *target, struct device_t *device, uint8_t *data, uint64_t data_size, uint32_t task_id, struct gemini_option_t *option)
 {
 	int retval = ERROR_OK;
 	struct duration block_duration, bop_duration;
@@ -575,7 +575,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 				}
 				write_counter += 1;
 				block_counter -= 1;
-				stats->data_sent += GEMINI_BLOCK_SIZE;
+				option->data_sent += GEMINI_BLOCK_SIZE;
 				data += GEMINI_BLOCK_SIZE;
 			}
 
@@ -589,9 +589,9 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 				break;
 			}
 
-			if (stats->log & 1) {
-				float progress = ((float)stats->data_sent / (float)stats->total_packages_size) * 100.0;
-				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, stats->data_sent, stats->total_packages_size);
+			if (option->log & 1) {
+				float progress = ((float)option->data_sent / (float)option->total_packages_size) * 100.0;
+				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, option->data_sent, option->total_packages_size);
 			}
 
 			timeout_counter = 0;
@@ -599,7 +599,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 		else
 		{
 			// circular buffer is full
-			stats->cicular_buffer_full_count += 1;
+			option->cicular_buffer_full_count += 1;
 			++timeout_counter;
 
 			// check cmd status
@@ -610,7 +610,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 				break;
 			}
 
-			if (timeout_counter >= stats->timeout_counter)
+			if (timeout_counter >= option->timeout_counter)
 			{
 				LOG_ERROR("[RS] Circular buffer timed out.");
 				retval = ERROR_TIMEOUT_REACHED;
@@ -627,12 +627,12 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 		// take some statistics
 		duration_measure(&block_duration);
-		stats->total_us += (block_duration.elapsed.tv_usec + (block_duration.elapsed.tv_sec * 1000000));
-		usleep(stats->wait_time_us);
+		option->total_us += (block_duration.elapsed.tv_usec + (block_duration.elapsed.tv_sec * 1000000));
+		usleep(option->wait_time_us);
 	}
 
 	duration_measure(&bop_duration);
-	stats->total_overall_us += (bop_duration.elapsed.tv_usec + (bop_duration.elapsed.tv_sec * 1000000));
+	option->total_overall_us += (bop_duration.elapsed.tv_usec + (bop_duration.elapsed.tv_sec * 1000000));
 
 	if (target->halt_issued == true)
 		target_resume(target, true, 0, true, false);
@@ -646,7 +646,7 @@ static int gemini_program_bitstream(struct target *target, struct device_t *devi
 	uint32_t cfg_done, cfg_error;
 	uint32_t status;
 	uint8_t *bop;
-	struct gemini_stats option = { 0 };
+	struct gemini_option_t option = { 0 };
 
 	LOG_INFO("[RS] Configuring FPGA fabric...");
 
@@ -718,7 +718,7 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 {
 	int retval = ERROR_OK;
 	uint32_t status;
-	struct gemini_stats option = { 0 };
+	struct gemini_option_t option = { 0 };
 	uint64_t filesize = (uint64_t)bit_file->filesize;
 
 	LOG_INFO("[RS] Programming SPI Flash...");
@@ -763,7 +763,7 @@ static int gemini_program_otp(struct target *target, struct device_t *device, ge
 	int retval = ERROR_OK;
 	uint32_t status;
 	uint8_t *bop;
-	struct gemini_stats option = { 0 };
+	struct gemini_option_t option = { 0 };
 
 	LOG_INFO("[RS] Programming OTP...");
 
@@ -880,16 +880,16 @@ static struct pld_device *gemini_get_pld_device_driver(void)
 	return device;
 }
 
-PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
+PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_t_command)
 {
-	struct gemini_pld_device *gemini_info;
+	struct gemini_pld_device_t *gemini_info;
 	int ret = ERROR_OK;
 
 	if (CMD_ARGC < 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	// allocate memory for devices
-	gemini_info = malloc(sizeof(struct gemini_pld_device));
+	gemini_info = malloc(sizeof(struct gemini_pld_device_t));
 	gemini_info->count = CMD_ARGC - 1;
 	gemini_info->target_info = malloc(sizeof(struct target_info_t) * gemini_info->count);
 
@@ -940,7 +940,7 @@ COMMAND_HANDLER(gemini_handle_load_command)
 {
 	struct timeval start, end, duration;
 	struct pld_device *pld_device;
-	struct gemini_pld_device *gemini_device = NULL;
+	struct gemini_pld_device_t *gemini_device = NULL;
 	struct device_t *device = NULL;
 	int retval;
 	unsigned int progress_log = 0;
@@ -959,7 +959,7 @@ COMMAND_HANDLER(gemini_handle_load_command)
 	}
 
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
-	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	gemini_device = (struct gemini_pld_device_t *)(pld_device->driver_priv);
 	// user input is 1-based indexing. internally is 0-based indexing
 	if (index == 0 || (index - 1) >= gemini_device->count) {
 		command_print(CMD, "device index '#%s' is out of bounds", CMD_ARGV[0]);
@@ -1001,7 +1001,7 @@ COMMAND_HANDLER(gemini_handle_load_command)
 COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 {
 	struct pld_device *pld_device = NULL;
-	struct gemini_pld_device *gemini_device = NULL;
+	struct gemini_pld_device_t *gemini_device = NULL;
 	struct device_t *device = NULL;
 	uint32_t cfg_done;
 	uint32_t cfg_error;
@@ -1017,7 +1017,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 	}
 
 	// check if index is not out of bound
-	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	gemini_device = (struct gemini_pld_device_t *)(pld_device->driver_priv);
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], index);
 	// user input is 1-based indexing. internally is 0-based indexing
 	if (index == 0 || (index - 1) >= gemini_device->count)
@@ -1048,7 +1048,7 @@ COMMAND_HANDLER(gemini_handle_get_cfg_status_command)
 COMMAND_HANDLER(gemini_handle_list_device_command)
 {
 	struct pld_device *pld_device = NULL;
-	struct gemini_pld_device *gemini_device = NULL;
+	struct gemini_pld_device_t *gemini_device = NULL;
 	struct device_t *device = NULL;
 
 	pld_device = gemini_get_pld_device_driver();
@@ -1067,7 +1067,7 @@ COMMAND_HANDLER(gemini_handle_list_device_command)
 	command_print(CMD, "      | Index  | Device                                  | ID         | IRLen    | Flash Size      ");
 	command_print(CMD, "------ -------- ----------------------------------------- ------------ ---------- -----------------");
 
-	gemini_device = (struct gemini_pld_device *)(pld_device->driver_priv);
+	gemini_device = (struct gemini_pld_device_t *)(pld_device->driver_priv);
 	for (uint32_t i = 0; i < gemini_device->count; ++i)
 	{
 		// print device details
@@ -1117,6 +1117,6 @@ static const struct command_registration gemini_command_handler[] = {
 struct pld_driver gemini_pld = {
 	.name = "gemini",
 	.commands = gemini_command_handler,
-	.pld_device_command = &gemini_pld_device_command,
+	.pld_device_command = &gemini_pld_device_t_command,
 	.load = &gemini_load,
 };
