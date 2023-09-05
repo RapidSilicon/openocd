@@ -14,15 +14,9 @@
 #include "pld.h"
 #include "helper/time_support.h"
 
-//#define LOCAL_BUILD
 //#define PROTOTYPE_BUILD
 
-#ifdef LOCAL_BUILD
-#	define GEMINI_IDCODE			0x20000913
-#else
-#	define GEMINI_IDCODE			0x1000563d
-#endif
-
+#define GEMINI_IDCODE				0x1000563d
 #define GEMINI_PRODUCT_ID			0x31303050
 #define GEMINI_BLOCK_SIZE			2048
 #define GEMINI_NUM_OF_BLOCKS		4
@@ -59,19 +53,7 @@ struct prg_mode_map_t prg_modes[] = {
 
 struct device_t device_table[] =
 {
-#if defined(LOCAL_BUILD)
-    {
-		.name           = "gemini",
-		.debug_control  = 0x80003028,
-		.spare_reg      = 0x800030f0,
-		.cfg_status     = 0x80003ff4,
-		.fsbl_ubi_addr  = 0x80000000,
-		.ram_size       = 261120, /* 255kb SRAM */
-		.cbuffer        = 0x80000000,
-		.read_counter   = 0x80003ffc,
-		.write_counter  = 0x80003ff8,
-	},
-#elif defined(PROTOTYPE_BUILD)
+#if defined(PROTOTYPE_BUILD)
     {
 		.name           = "gemini",
 		.debug_control  = 0xf1000028,
@@ -436,12 +418,6 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 		LOG_ERROR("[RS] FSBL package (%d bytes) is larger than the available SRAM size (%d bytes)", fsbl_size, device->ram_size);
 		return ERROR_FAIL;
 	}
-
-#ifdef LOCAL_BUILD
-	// debug on local. to be removed
-	if (fsbl_size > (1024 * 12))
-		fsbl_size = 1024 * 12;
-#endif
 
 	if ((fsbl_size % 4) == 0)
 		size = 4;
