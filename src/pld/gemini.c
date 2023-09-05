@@ -48,7 +48,7 @@ struct prg_mode_map_t {
 struct prg_mode_map_t prg_modes[] = {
 	{ "fpga" , GEMINI_PRG_MODE_FPGA },
 	{ "flash", GEMINI_PRG_MODE_SPI_FLASH },
-	{ "opt"  , GEMINI_PRG_MODE_OTP }
+	{ "otp"  , GEMINI_PRG_MODE_OTP }
 };
 
 struct device_t device_table[] =
@@ -965,8 +965,8 @@ COMMAND_HANDLER(gemini_handle_load_command)
 
 	if (mode == GEMINI_PRG_MODE_NONE)
 	{
-		command_print(CMD, "Invalid programming mode '#%s'.", CMD_ARGV[1]);
-		return ERROR_COMMAND_SYNTAX_ERROR;
+		command_print(CMD, "Invalid programming mode '%s'.", CMD_ARGV[1]);
+		return ERROR_FAIL;
 	}
 
 	if (gemini_get_device_type(get_cmdline_option(CMD, "-d", "gemini"), &device) != ERROR_OK)
@@ -1076,7 +1076,7 @@ static const struct command_registration gemini_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.handler = gemini_handle_load_command,
 		.help = "program/configure bitstream into spi flash or fpga fabric",
-		.usage = "index mode filepath -p <progress level>",
+		.usage = "index mode filepath -p {log level}",
 	},
 	{
 		.name = "status",
