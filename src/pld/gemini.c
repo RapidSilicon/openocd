@@ -231,12 +231,8 @@ static int gemini_get_firmware_type(struct target * target, struct device_t *dev
 
 	if (gemini_read_reg32(target, device->spare_reg, &spare_reg) == ERROR_OK)
 	{
-		spare_reg >>= 29;
-		if (spare_reg == PRG_REG_FW_TYPE_BOOTROM || spare_reg == PRG_REG_FW_TYPE_CFG_FSBL)
-		{
-			*fw_type = spare_reg;
-			return ERROR_OK;
-		}
+		*fw_type = spare_reg >> 29;
+		return ERROR_OK;
 	}
 
 	return ERROR_FAIL;
@@ -399,10 +395,15 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 		return ERROR_FAIL;
 	}
 
-	if (fw_type == PRG_REG_FW_TYPE_CFG_FSBL)
+	if (fw_type == PRG_REG_FW_TYPE_CFG_FSBL || fw_type == PRG_REG_FW_TYPE_MANF_FSBL)
 	{
 		LOG_INFO("[RS] FSBL firmware type detected");
 		return ERROR_OK;
+	}
+	else if (fw_type != PRG_REG_FW_TYPE_BOOTROM)
+	{
+		LOG_INFO("[RS] Unknown firmware");
+		return ERROR_FAIL;
 	}
 
 	LOG_INFO("[RS] Loading FSBL firmware...");
@@ -441,8 +442,13 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 	if (retval == ERROR_OK)
 	{
 		// double check if the firmware type is FSBL
-		if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK || fw_type != PRG_REG_FW_TYPE_CFG_FSBL)
-			retval = ERROR_FAIL;
+		if (gemini_get_firmware_type(target, device, &fw_type) != ERROR_OK)
+		{
+			if (fw_type != PRG_REG_FW_TYPE_CFG_FSBL && fw_type != PRG_REG_FW_TYPE_MANF_FSBL)
+			{
+				retval = ERROR_FAIL;
+			}
+		}
 	}
 
 	if (retval != ERROR_OK)
