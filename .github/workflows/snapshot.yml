@@ -2,7 +2,11 @@
 
 # Copyright (C) 2020 by Tarek BOUCHKATI <tarek.bouchkati@gmail.com>
 
-on: push
+on:
+  pull_request:
+  push:
+       tags:
+           '*' 
 
 name: OpenOCD Snapshot
 
@@ -115,9 +119,10 @@ jobs:
       #   env:
       #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release
-        if: "${{ github.ref == 'refs/heads/master' }}"
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1
         with:
+          name: latest  
           tag: ${{ env.RELEASE_NAME }}
           commit: ${{ github.sha }}
           draft: false
