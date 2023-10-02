@@ -74,8 +74,9 @@ jobs:
           [ -z $OPENOCD_TAG ] && OPENOCD_TAG="`git rev-parse --short HEAD`"
           # check if there is tag pointing at HEAD, if so the release will have the same name as the tag,
           # otherwise it will be named 'latest'
-          RELEASE_NAME="`git tag --points-at HEAD`"
-          [ -z $RELEASE_NAME ] && RELEASE_NAME="latest"
+          #RELEASE_NAME="`git tag --points-at HEAD`"
+          #[ -z $RELEASE_NAME ] && RELEASE_NAME="latest"
+          RELEASE_NAME="latest"
           [[ $RELEASE_NAME = "latest" ]] && IS_PRE_RELEASE="true" || IS_PRE_RELEASE="false"
           # set env and call cross-build.sh
           export OPENOCD_TAG=$OPENOCD_TAG
