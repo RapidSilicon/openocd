@@ -15,14 +15,14 @@
 
 struct device_t {
 	char *name;
-	/*intptr_t*/uint32_t debug_control;
-	/*intptr_t*/uint32_t spare_reg;
-	/*intptr_t*/uint32_t cfg_status;
-	/*intptr_t*/uint32_t fsbl_ubi_addr;
+	uint32_t debug_control;
+	uint32_t spare_reg;
+	uint32_t cfg_status;
+	uint32_t fsbl_ubi_addr;
 	uint32_t ram_size;
-	/*intptr_t*/uint32_t cbuffer;
-	/*intptr_t*/uint32_t read_counter;
-	/*intptr_t*/uint32_t write_counter;
+	uint32_t cbuffer;
+	uint32_t read_counter;
+	uint32_t write_counter;
 };
 
 struct target_info_t {
