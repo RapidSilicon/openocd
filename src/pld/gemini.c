@@ -428,13 +428,13 @@ static int gemini_load_fsbl(struct target *target, struct device_t *device, gemi
 	retval = gemini_write_memory(target, device->fsbl_ubi_addr, size, fsbl_size / size, (uint8_t *)bit_file->ubi_header);
 	if (retval != ERROR_OK)
 	{
-		//LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08" PRIxPTR, fsbl_size, device->fsbl_ubi_addr);
+		LOG_ERROR("[RS] Failed to write bitstream of %d bytes to SRAM at 0x%08x", fsbl_size, device->fsbl_ubi_addr);
 		return ERROR_FAIL;
 	}
 
 	if (gemini_write_reg32(target, device->spare_reg, 16, 0, PRG_REG_TSK_CMD_BBF_FDI) != ERROR_OK)
 	{
-		//LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08" PRIxPTR, PRG_REG_TSK_CMD_BBF_FDI, device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command 0x%x to spare_reg at 0x%08x", PRG_REG_TSK_CMD_BBF_FDI, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
@@ -485,13 +485,13 @@ static int gemini_reset_read_write_counters(struct target *target, struct device
 {
 	if (gemini_write_reg32(target, device->write_counter, 32, 0, 0) != ERROR_OK)
 	{
-		//LOG_ERROR("[RS] Failed to reset write counter at 0x%08" PRIxPTR, device->write_counter);
+		LOG_ERROR("[RS] Failed to reset write counter at 0x%08x", device->write_counter);
 		return ERROR_FAIL;
 	}
 
 	if (gemini_write_reg32(target, device->read_counter, 32, 0, 0) != ERROR_OK)
 	{
-		//LOG_ERROR("[RS] Failed to reset read counter at 0x%08" PRIxPTR, device->read_counter);
+		LOG_ERROR("[RS] Failed to reset read counter at 0x%08x", device->read_counter);
 		return ERROR_FAIL;
 	}
 
@@ -517,7 +517,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 	// write task cmd
 	if (gemini_write_reg32(target, device->spare_reg, 16, 0, task_id) != ERROR_OK)
 	{
-		//LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08" PRIxPTR, task_id, device->spare_reg);
+		LOG_ERROR("[RS] Failed to write command %d to spare_reg at 0x%08x", task_id, device->spare_reg);
 		return ERROR_FAIL;
 	}
 
@@ -536,7 +536,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 		if (target_read_u32(target, device->read_counter, &read_counter) != ERROR_OK)
 		{
-			//LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08" PRIxPTR, device->read_counter);
+			LOG_ERROR("[RS] Failed to retrieve read counter at 0x%08x", device->read_counter);
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -563,7 +563,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 			{
 				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), data) != ERROR_OK)
 				{
-					//LOG_ERROR("[RS] Failed to write a block to 0x%08" PRIxPTR " on the device", GEMINI_BUFFER_ADDR(device->cbuffer, write_counter));
+					LOG_ERROR("[RS] Failed to write a block to 0x%08x on the device", GEMINI_BUFFER_ADDR(device->cbuffer, write_counter));
 					retval = ERROR_FAIL;
 					break;
 				}
@@ -578,7 +578,7 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 			if (target_write_u32(target, device->write_counter, write_counter) != ERROR_OK)
 			{
-				//LOG_ERROR("[RS] Failed to increment write counter at 0x%08" PRIxPTR, device->write_counter);
+				LOG_ERROR("[RS] Failed to increment write counter at 0x%08x", device->write_counter);
 				retval = ERROR_FAIL;
 				break;
 			}
