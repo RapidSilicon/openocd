@@ -566,8 +566,17 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 			for (uint32_t i = 0; i < avail_blocks; i++)
 			{
-				memset(block_buffer, 0, sizeof(block_buffer));
-				memcpy(block_buffer, data, sizeof(block_buffer));
+				if ((data_size - option->data_sent) < GEMINI_BLOCK_SIZE)
+				{
+					// handle last block that is not 2k aligned
+					memset(block_buffer, 0, GEMINI_BLOCK_SIZE);
+					memcpy(block_buffer, data, data_size - option->data_sent);
+				}
+				else
+				{
+					memcpy(block_buffer, data, GEMINI_BLOCK_SIZE);
+				}
+
 				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), block_buffer) != ERROR_OK)
 				{
 					LOG_ERROR("[RS] Failed to write a block to 0x%08x on the device", GEMINI_BUFFER_ADDR(device->cbuffer, write_counter));
