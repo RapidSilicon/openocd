@@ -84,9 +84,9 @@ struct device_t device_table[] =
 		.cfg_status     = 0xa0710000,
 		.fsbl_ubi_addr  = 0xA0200000,
 		.ram_size       = 65536, /* 64kb ILM */
-		.cbuffer        = 0xA040DFF8,
-		.read_counter   = 0xA040FFFC,
-		.write_counter  = 0xA040FFF8,
+		.cbuffer        = 0xA0305DF8,
+		.read_counter   = 0xA0307DFC,
+		.write_counter  = 0xA0307DF8,
 	},
 #endif
 };
@@ -505,7 +505,8 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 	uint32_t read_counter;
 	uint32_t write_counter = 0;
 	uint32_t timeout_counter = 0;
-	uint32_t block_counter = data_size / GEMINI_BLOCK_SIZE;
+	uint32_t block_counter = (data_size + GEMINI_BLOCK_SIZE - 1) / GEMINI_BLOCK_SIZE;
+	uint8_t block_buffer[GEMINI_BLOCK_SIZE];
 	uint32_t spare_reg = 0;
 
 	// reset read/write counters
@@ -543,25 +544,31 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 		if (read_counter > write_counter)
 		{
-			LOG_ERROR("[RS] Read counter (%d) cannot be greater than write counter (%d)", read_counter, write_counter);
+			LOG_ERROR("[RS] Read counter (%u) cannot be greater than write counter (%u)", read_counter, write_counter);
 			retval = ERROR_FAIL;
 			break;
 		}
 
 		if ((write_counter - read_counter) > GEMINI_NUM_OF_BLOCKS)
 		{
-			LOG_ERROR("[RS] The available blocks (%d) is greater than %d", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
+			LOG_ERROR("[RS] The available blocks (%u) is greater than %u", write_counter - read_counter, GEMINI_NUM_OF_BLOCKS);
 			retval = ERROR_FAIL;
 			break;
 		}
 
 		if ((write_counter - read_counter) < GEMINI_NUM_OF_BLOCKS)
 		{
-			uint32_t num_blocks = GEMINI_NUM_OF_BLOCKS - (write_counter - read_counter);
+			uint32_t avail_blocks = GEMINI_NUM_OF_BLOCKS - (write_counter - read_counter);
 
-			for (uint32_t i = 0, num = num_blocks < block_counter ? num_blocks : block_counter; i < num; ++i)
+			if (avail_blocks > block_counter) {
+				avail_blocks = block_counter;
+			}
+
+			for (uint32_t i = 0; i < avail_blocks; i++)
 			{
-				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), data) != ERROR_OK)
+				memset(block_buffer, 0, sizeof(block_buffer));
+				memcpy(block_buffer, data, sizeof(block_buffer));
+				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), block_buffer) != ERROR_OK)
 				{
 					LOG_ERROR("[RS] Failed to write a block to 0x%08x on the device", GEMINI_BUFFER_ADDR(device->cbuffer, write_counter));
 					retval = ERROR_FAIL;
@@ -716,12 +723,6 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 	uint64_t filesize = (uint64_t)bit_file->filesize;
 
 	LOG_INFO("[RS] Programming SPI Flash...");
-
-	if ((filesize % GEMINI_BLOCK_SIZE) != 0)
-	{
-		LOG_ERROR("[RS] Bitstream file size %" PRIu64 " is not multiple of %d bytes", filesize, GEMINI_BLOCK_SIZE);
-		return ERROR_FAIL;
-	}
 
 	option.total_packages_size = filesize;
 	option.package_count = 1;
