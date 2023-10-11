@@ -600,8 +600,11 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 			}
 
 			if (option->log & 1) {
-				float progress = ((float)option->data_sent / (float)option->total_packages_size) * 100.0;
-				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, option->data_sent, option->total_packages_size);
+				uint64_t data_sent = option->data_sent;
+				if (data_sent > option->total_packages_size)
+					data_sent = option->total_packages_size;
+				float progress = (data_sent / (float)option->total_packages_size) * 100.0;
+				LOG_INFO("[RS] Progress %.2f%% (%"PRIu64"/%"PRIu64" bytes)", progress, data_sent, option->total_packages_size);
 			}
 
 			timeout_counter = 0;
