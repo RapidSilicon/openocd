@@ -738,7 +738,7 @@ static int gemini_program_flash(struct target *target, struct device_t *device, 
 
 	option.total_packages_size = filesize;
 	option.package_count = 1;
-	option.timeout_counter = GEMINI_TIMEOUT_COUNTER;
+	option.timeout_counter = GEMINI_TIMEOUT_COUNTER * 8; // extend timeout from 15s to 2min as flash erase takes long time to ensure no false timeout
 	option.wait_time_us = GEMINI_WAIT_TIME_US;
 	option.log = log_level;
 
