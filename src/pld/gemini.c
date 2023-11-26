@@ -9,6 +9,8 @@
 #include "config.h"
 #endif
 
+#include <stdio.h>
+
 #include "gemini.h"
 #include "gemini_bit.h"
 #include "pld.h"
@@ -524,6 +526,16 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 
 	duration_start(&bop_duration);
 
+	// debug - create log file
+	FILE *logfile;
+	logfile = fopen("/tmp/virgo_bitstream_dump.txt", "w");
+	if (logfile == NULL)
+	{
+		LOG_ERROR("[RS] Error opening bitstream dump file");
+		return ERROR_FAIL;
+	}
+	// debug - end
+
 	while (block_counter > 0)
 	{
 		duration_start(&block_duration);
@@ -576,6 +588,14 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 				{
 					memcpy(block_buffer, data, GEMINI_BLOCK_SIZE);
 				}
+
+				// debug - log block buffer content
+				uint32_t *ptr = (uint32_t *)block_buffer;
+				for (int j = 0; j < 512; j++)
+				{
+					fprintf(logfile, "0x%08x\n", ptr[j]);
+				}
+				// debug - end
 
 				if (target_write_memory(target, GEMINI_BUFFER_ADDR(device->cbuffer, write_counter), sizeof(uint32_t), GEMINI_BLOCK_SIZE / sizeof(uint32_t), block_buffer) != ERROR_OK)
 				{
@@ -643,6 +663,10 @@ static int gemini_stream_data_blocks(struct target *target, struct device_t *dev
 		option->total_us += (block_duration.elapsed.tv_usec + (block_duration.elapsed.tv_sec * 1000000));
 		usleep(option->wait_time_us);
 	}
+
+	// debug - close file
+	fclose(logfile);
+	// debug - end
 
 	duration_measure(&bop_duration);
 	option->total_overall_us += (bop_duration.elapsed.tv_usec + (bop_duration.elapsed.tv_sec * 1000000));
