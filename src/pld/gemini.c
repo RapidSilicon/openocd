@@ -887,26 +887,26 @@ static struct pld_device *gemini_get_pld_device_driver(void)
 	return device;
 }
 
-PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
+PLD_CREATE_COMMAND_HANDLER(gemini_pld_create_command)
 {
 	struct gemini_pld_device_t *gemini_info;
 	int ret = ERROR_OK;
 
-	if (CMD_ARGC < 2)
+	if (CMD_ARGC < 3)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	// allocate memory for devices
 	gemini_info = malloc(sizeof(struct gemini_pld_device_t));
-	gemini_info->count = CMD_ARGC - 1;
+	gemini_info->count = CMD_ARGC - 2;
 	gemini_info->target_info = malloc(sizeof(struct target_info_t) * gemini_info->count);
 
 	// enumerate all passed in targets
 	for (uint32_t i = 0; i < gemini_info->count; ++i)
 	{
-		struct target *target = get_target(CMD_ARGV[i+1]);
+		struct target *target = get_target(CMD_ARGV[i+2]);
 		if (!target || !target->tap)
 		{
-			command_print(CMD, "Target: %s is invalid", CMD_ARGV[i+1]);
+			command_print(CMD, "Target: %s is invalid", CMD_ARGV[i+2]);
 			ret = ERROR_FAIL;
 			break;
 		}
@@ -1128,6 +1128,6 @@ static const struct command_registration gemini_command_handler[] = {
 struct pld_driver gemini_pld = {
 	.name = "gemini",
 	.commands = gemini_command_handler,
-	.pld_device_command = &gemini_pld_device_command,
+	.pld_create_command = &gemini_pld_create_command,
 	.load = &gemini_load,
 };
