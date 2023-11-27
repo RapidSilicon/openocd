@@ -887,7 +887,7 @@ static struct pld_device *gemini_get_pld_device_driver(void)
 	return device;
 }
 
-PLD_DEVICE_COMMAND_HANDLER(gemini_pld_device_command)
+PLD_CREATE_COMMAND_HANDLER(gemini_pld_create_command)
 {
 	struct gemini_pld_device_t *gemini_info;
 	int ret = ERROR_OK;
@@ -1128,6 +1128,6 @@ static const struct command_registration gemini_command_handler[] = {
 struct pld_driver gemini_pld = {
 	.name = "gemini",
 	.commands = gemini_command_handler,
-	.pld_device_command = &gemini_pld_device_command,
+	.pld_create_command = &gemini_pld_create_command,
 	.load = &gemini_load,
 };
